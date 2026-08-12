@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Edit
@@ -167,6 +166,7 @@ fun PinEditScreen(
     var addressSuggestions by remember { mutableStateOf<List<PoiItemV2>>(emptyList()) }
     var addressSearching by remember { mutableStateOf(false) }
     var addressFocused by remember { mutableStateOf(false) }
+    var focusedTextTemplateId by remember { mutableStateOf<Long?>(null) }
 
     fun markDirty() { hasChanges = true }
 
@@ -540,15 +540,68 @@ fun PinEditScreen(
                         when (template.fieldType) {
                             FieldType.TEXT -> {
                                 val v = editingValues[template.id] ?: fieldValues[template.id]?.firstOrNull()?.value ?: ""
-                                OutlinedTextField(value = v, onValueChange = { editingValues = editingValues + (template.id to it); markDirty() }, modifier = Modifier.fillMaxWidth(), minLines = 1, label = { Text(template.fieldName) })
+                                OutlinedTextField(
+                                    value = v,
+                                    onValueChange = { editingValues = editingValues + (template.id to it); markDirty() },
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { focusedTextTemplateId = if (it.isFocused) template.id else null },
+                                    minLines = 1,
+                                    label = { Text(template.fieldName) },
+                                    trailingIcon = if (focusedTextTemplateId == template.id && v.isNotEmpty()) {
+                                        {
+                                            IconButton(onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                cm.setPrimaryClip(ClipData.newPlainText("field_value", v))
+                                                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                            }) {
+                                                Text("复制", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    } else null
+                                )
                             }
                             FieldType.NUMBER -> {
                                 val v = editingValues[template.id] ?: fieldValues[template.id]?.firstOrNull()?.value ?: ""
-                                OutlinedTextField(value = v, onValueChange = { editingValues = editingValues + (template.id to it); markDirty() }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), label = { Text(template.fieldName) })
+                                OutlinedTextField(
+                                    value = v,
+                                    onValueChange = { editingValues = editingValues + (template.id to it); markDirty() },
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { focusedTextTemplateId = if (it.isFocused) template.id else null },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    label = { Text(template.fieldName) },
+                                    trailingIcon = if (focusedTextTemplateId == template.id && v.isNotEmpty()) {
+                                        {
+                                            IconButton(onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                cm.setPrimaryClip(ClipData.newPlainText("field_value", v))
+                                                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                            }) {
+                                                Text("复制", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    } else null
+                                )
                             }
                             FieldType.DATE -> {
                                 val v = editingValues[template.id] ?: fieldValues[template.id]?.firstOrNull()?.value ?: ""
-                                OutlinedTextField(value = v, onValueChange = { editingValues = editingValues + (template.id to it); markDirty() }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("YYYY-MM-DD") }, label = { Text(template.fieldName) })
+                                OutlinedTextField(
+                                    value = v,
+                                    onValueChange = { editingValues = editingValues + (template.id to it); markDirty() },
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { focusedTextTemplateId = if (it.isFocused) template.id else null },
+                                    singleLine = true,
+                                    placeholder = { Text("YYYY-MM-DD") },
+                                    label = { Text(template.fieldName) },
+                                    trailingIcon = if (focusedTextTemplateId == template.id && v.isNotEmpty()) {
+                                        {
+                                            IconButton(onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                cm.setPrimaryClip(ClipData.newPlainText("field_value", v))
+                                                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                            }) {
+                                                Text("复制", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                    } else null
+                                )
                             }
                             FieldType.IMAGE -> {
                                 Text(text = template.fieldName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

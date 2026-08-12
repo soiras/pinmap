@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun PinListScreen(
     modifier: Modifier = Modifier,
+    isVisible: Boolean = true,
     onPinClick: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -62,11 +63,13 @@ fun PinListScreen(
 
     var showDeleteDialog by remember { mutableStateOf<Pin?>(null) }
 
-    LaunchedEffect(Unit) {
-        val locationManager = LocationManager(context)
-        if (locationManager.hasLocationPermission()) {
-            val (loc, _) = locationManager.getLastLocation()
-            viewModel.setCurrentLocation(loc.latitude, loc.longitude)
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            val locationManager = LocationManager(context)
+            if (locationManager.hasLocationPermission()) {
+                val (loc, _) = locationManager.getLastLocation()
+                viewModel.setCurrentLocation(loc.latitude, loc.longitude)
+            }
         }
     }
 

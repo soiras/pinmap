@@ -35,17 +35,26 @@ class PinListViewModel(
     private val mSortMode = MutableStateFlow(SortMode.CREATED_DESC)
     val _sortMode: StateFlow<SortMode> = mSortMode.asStateFlow()
 
-    private var mCurrentLat = LocationManager.DEFAULT_LATITUDE
-    private var mCurrentLng = LocationManager.DEFAULT_LONGITUDE
-    val _currentLat: Double get() = mCurrentLat
-    val _currentLng: Double get() = mCurrentLng
+    private val mCurrentLat = MutableStateFlow(LocationManager.DEFAULT_LATITUDE)
+    private val mCurrentLng = MutableStateFlow(LocationManager.DEFAULT_LONGITUDE)
+    val _currentLat: Double get() = mCurrentLat.value
+    val _currentLng: Double get() = mCurrentLng.value
 
     val filteredPins: StateFlow<List<Pin>> = combine(
         mPins,
         mSearchQuery,
         mSelectedCategoryId,
-        mSortMode
-    ) { pins, query, categoryId, sort ->
+        mSortMode,
+        mCurrentLat,
+        mCurrentLng
+    ) { values: Array<Any?> ->
+        val pins = values[0] as List<Pin>
+        val query = values[1] as String
+        val categoryId = values[2] as Long?
+        val sort = values[3] as SortMode
+        val lat = values[4] as Double
+        val lng = values[5] as Double
+
         var result = pins
 
         if (categoryId != null) {
@@ -59,8 +68,6 @@ class PinListViewModel(
             }
         }
 
-        val lat = mCurrentLat
-        val lng = mCurrentLng
         when (sort) {
             SortMode.NAME_ASC -> result = result.sortedBy { it.title }
             SortMode.NAME_DESC -> result = result.sortedByDescending { it.title }
@@ -112,8 +119,8 @@ class PinListViewModel(
     }
 
     fun setCurrentLocation(lat: Double, lng: Double) {
-        mCurrentLat = lat
-        mCurrentLng = lng
+        mCurrentLat.value = lat
+        mCurrentLng.value = lng
     }
 
     fun deletePin(pin: Pin) {

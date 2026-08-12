@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
                             )
                             PinListScreen(
                                 modifier = Modifier.fillMaxSize().visible(selectedTabIndex == TAB_PIN_LIST),
+                                isVisible = selectedTabIndex == TAB_PIN_LIST,
                                 onPinClick = { pinId ->
                                     navController.navigate(Screen.PinEdit.createRoute(pinId))
                                 }
