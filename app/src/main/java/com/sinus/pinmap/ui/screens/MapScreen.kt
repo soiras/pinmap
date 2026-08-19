@@ -56,6 +56,7 @@ import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.viewmodel.MapHolderViewModel
 import com.sinus.pinmap.ui.viewmodel.MapViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -158,7 +159,7 @@ fun MapScreen(
                 })
                 search.searchPOIAsyn()
             } catch (e: Exception) {
-                Log.e("MapScreen", "POI search error", e)
+                Log.e("Sinus-Map", "POI search error", e)
             }
         } else {
             poiResults = emptyList()
@@ -254,7 +255,7 @@ fun MapScreen(
                         mapView.onResume()
                     } catch (e: Exception) {
                         // 忽略异常
-                        Log.e("MapScreen", "MapScreen: $e")
+                        Log.e("Sinus-Map", "MapScreen: $e")
                     }
                 }
 
@@ -262,7 +263,7 @@ fun MapScreen(
                     try {
                         mapView.onPause()
                     } catch (e: Exception) {
-                        Log.e("MapScreen", "MapScreen: $e")
+                        Log.e("Sinus-Map", "MapScreen: $e")
                     }
                 }
 
@@ -661,10 +662,18 @@ fun MapScreen(
                                     aiSearchError = null
                                     showSearchResults = true
                                     try {
+                                        // 加载动态字段：全部字段模板 + 每个 pin 的字段值
+                                        val allTemplates = fieldTemplateRepository.getAllFieldTemplates().first()
+                                        val templatesById = allTemplates.associateBy { it.id }
+                                        val fieldValuesByPin = pins.associate { pin ->
+                                            pin.id to fieldValueRepository.getFieldValuesByPin(pin.id).first()
+                                        }
                                         val result = AiSearchClient.search(
                                             query = searchQuery,
                                             pins = pins,
-                                            categories = categories
+                                            categories = categories,
+                                            fieldValuesByPin = fieldValuesByPin,
+                                            templatesById = templatesById
                                         )
                                         val idSet = result.pinIds.toSet()
                                         aiResults = pins.filter { it.id in idSet }

@@ -22,7 +22,7 @@ import java.util.zip.ZipInputStream
 
 object PinImporter {
 
-    private const val TAG = "PinImporter"
+    private const val TAG = "Sinus-Import"
     private const val COPY_BUFFER_SIZE = 64 * 1024
 
     data class ImportPreview(
