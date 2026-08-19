@@ -118,9 +118,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
 
             var ollamaUrl by remember { mutableStateOf(AppSettings.getOllamaBaseUrl()) }
+            var aiConfigChanged by remember { mutableStateOf(false) }
             OutlinedTextField(
                 value = ollamaUrl,
-                onValueChange = { ollamaUrl = it },
+                onValueChange = { ollamaUrl = it; aiConfigChanged = true },
                 label = { Text("Ollama 地址") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -130,22 +131,22 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             var ollamaModel by remember { mutableStateOf(AppSettings.getOllamaModel()) }
             OutlinedTextField(
                 value = ollamaModel,
-                onValueChange = { ollamaModel = it },
+                onValueChange = { ollamaModel = it; aiConfigChanged = true },
                 label = { Text("模型名称") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            val aiConfigDirty = ollamaUrl.trim() != AppSettings.getOllamaBaseUrl() ||
-                ollamaModel.trim() != AppSettings.getOllamaModel()
-
             Button(
                 onClick = {
                     AppSettings.saveOllamaBaseUrl(ollamaUrl.trim())
                     AppSettings.saveOllamaModel(ollamaModel.trim())
+                    ollamaUrl = ollamaUrl.trim()
+                    ollamaModel = ollamaModel.trim()
+                    aiConfigChanged = false
                     Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                 },
-                enabled = aiConfigDirty,
+                enabled = aiConfigChanged,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("保存 AI 配置") }
 
