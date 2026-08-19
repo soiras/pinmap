@@ -3,6 +3,7 @@ package com.sinus.pinmap
 import android.app.Application
 import android.util.Log
 import com.amap.api.maps.MapsInitializer
+import com.sinus.pinmap.ui.utils.AppSettings
 import com.sinus.pinmap.ui.utils.AuthState
 
 class PinmapApplication : Application() {
@@ -10,6 +11,7 @@ class PinmapApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AuthState.init(this)
+        AppSettings.init(this)
         val savedKey = AuthState.getSavedKey()
         val apiKey = savedKey ?: BuildConfig.MAPS_API_KEY
         MapsInitializer.setApiKey(apiKey)

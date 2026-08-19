@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,6 +72,7 @@ import com.amap.api.services.poisearch.PoiResultV2
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
+import com.sinus.pinmap.ui.utils.AiSearchClient
 import com.sinus.pinmap.ui.utils.AuthState
 
 /**
@@ -114,6 +116,9 @@ fun MapScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var showSearchResults by remember { mutableStateOf(false) }
+    var aiResults by remember { mutableStateOf<List<Pin>>(emptyList()) }
+    var isAiSearching by remember { mutableStateOf(false) }
+    var aiSearchError by remember { mutableStateOf<String?>(null) }
 
     // 键盘控制器和焦点请求器
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -398,7 +403,8 @@ fun MapScreen(
                 .padding(start = 16.dp, end = 16.dp, bottom = searchBottom)
         ) {
             // 搜索结果列表
-            if (showSearchResults && (searchResults.isNotEmpty() || poiResults.isNotEmpty())) {
+            val aiSearchActive = isAiSearching || aiResults.isNotEmpty() || aiSearchError != null
+            if (showSearchResults && (aiSearchActive || searchResults.isNotEmpty() || poiResults.isNotEmpty())) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -408,7 +414,68 @@ fun MapScreen(
                                 .fillMaxWidth()
                                 .heightIn(max = SEARCH_RESULT_MAX_HEIGHT)
                     ) {
-                        if (searchResults.isNotEmpty()) {
+                        if (isAiSearching) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    Text("AI 搜索中...", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        } else if (aiSearchError != null) {
+                            item {
+                                Text(
+                                    aiSearchError ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else if (aiResults.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "AI 搜索结果",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(aiResults) { pin ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp)
+                                        .clickable {
+                                            scope.launch {
+                                                val aMap = mapHolder._aMap ?: return@launch
+                                                highlightedPinId = pin.id
+                                                aMap.animateCamera(
+                                                    CameraUpdateFactory.newLatLngZoom(
+                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
+                                                    )
+                                                )
+                                                showSearchResults = false; searchQuery = ""; keyboardController?.hide()
+                                            }
+                                        }
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(text = pin.title, style = MaterialTheme.typography.titleMedium)
+                                        pin.address?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (searchResults.isNotEmpty()) {
                             item {
                                 Text(
                                     "标记",
@@ -574,11 +641,51 @@ fun MapScreen(
                     )
 
                     if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            showSearchResults = false
-                        }) {
+                        IconButton(
+                            onClick = {
+                                searchQuery = ""
+                                showSearchResults = false
+                                aiResults = emptyList()
+                                aiSearchError = null
+                            }
+                        ) {
                             Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                        }
+                    }
+
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    isAiSearching = true
+                                    aiSearchError = null
+                                    showSearchResults = true
+                                    try {
+                                        val result = AiSearchClient.search(
+                                            query = searchQuery,
+                                            pins = pins,
+                                            categories = categories
+                                        )
+                                        val idSet = result.pinIds.toSet()
+                                        aiResults = pins.filter { it.id in idSet }
+                                            .sortedBy { result.pinIds.indexOf(it.id) }
+                                    } catch (e: Exception) {
+                                        aiSearchError = "AI 搜索失败：${e.message}"
+                                        aiResults = emptyList()
+                                    }
+                                    isAiSearching = false
+                                }
+                            },
+                            enabled = !isAiSearching
+                        ) {
+                            if (isAiSearching) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(ICON_SIZE_20),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Star, contentDescription = "AI 搜索")
+                            }
                         }
                     }
                 }
@@ -873,6 +980,7 @@ private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private val FAB_SIZE = 30.dp
 private val FAB_ICON_SIZE = 18.dp
+private val ICON_SIZE_20 = 20.dp
 private val FAB_CORNER_RADIUS = 10.dp
 private const val MARKER_SIZE_PX = 48
 private const val ARROW_HEIGHT_PX = 12

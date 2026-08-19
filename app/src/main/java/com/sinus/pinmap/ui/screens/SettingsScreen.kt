@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -18,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import com.sinus.pinmap.BuildConfig
 import com.sinus.pinmap.data.database.PinmapDatabase
 import com.sinus.pinmap.data.repository.PinRepository
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.sinus.pinmap.ui.utils.AppSettings
 import com.sinus.pinmap.ui.utils.AuthState
 import com.sinus.pinmap.ui.utils.PinExporter
 import com.sinus.pinmap.ui.utils.PinImporter
@@ -74,6 +79,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -101,6 +107,47 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         }
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("AI 搜索", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "使用本地 Ollama 进行意图搜索。需与 Ollama 处于同一局域网。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            var ollamaUrl by remember { mutableStateOf(AppSettings.getOllamaBaseUrl()) }
+            OutlinedTextField(
+                value = ollamaUrl,
+                onValueChange = { ollamaUrl = it },
+                label = { Text("Ollama 地址") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            var ollamaModel by remember { mutableStateOf(AppSettings.getOllamaModel()) }
+            OutlinedTextField(
+                value = ollamaModel,
+                onValueChange = { ollamaModel = it },
+                label = { Text("模型名称") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            val aiConfigDirty = ollamaUrl.trim() != AppSettings.getOllamaBaseUrl() ||
+                ollamaModel.trim() != AppSettings.getOllamaModel()
+
+            Button(
+                onClick = {
+                    AppSettings.saveOllamaBaseUrl(ollamaUrl.trim())
+                    AppSettings.saveOllamaModel(ollamaModel.trim())
+                    Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                },
+                enabled = aiConfigDirty,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("保存 AI 配置") }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
