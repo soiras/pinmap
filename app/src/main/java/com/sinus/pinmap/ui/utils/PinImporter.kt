@@ -58,6 +58,7 @@ object PinImporter {
         val description: String?,
         val address: String?,
         val avatarEntry: String?,
+        val isFavorite: Boolean,
         val createdAt: Long,
         val updatedAt: Long,
         val values: List<FieldValueData>
@@ -234,6 +235,7 @@ object PinImporter {
                             categoryId = category.id,
                             avatarPath = avatarPath,
                             address = pinData.address,
+                            isFavorite = pinData.isFavorite,
                             createdAt = pinData.createdAt,
                             updatedAt = pinData.updatedAt
                         )
@@ -327,6 +329,7 @@ object PinImporter {
                             description = pinJson.optNullableString("description"),
                             address = pinJson.optNullableString("address"),
                             avatarEntry = pinJson.optNullableString("avatarFile"),
+                            isFavorite = pinJson.optBoolean("isFavorite", false),
                             createdAt = pinJson.optLong("createdAt", System.currentTimeMillis()),
                             updatedAt = pinJson.optLong("updatedAt", System.currentTimeMillis()),
                             values = values

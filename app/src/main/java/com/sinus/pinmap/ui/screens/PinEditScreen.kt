@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -156,6 +157,7 @@ fun PinEditScreen(
     var editingAvatar by remember { mutableStateOf<String?>(null) }
     var avatarDeleted by remember { mutableStateOf(false) }
     var viewingAvatar by remember { mutableStateOf(false) }
+    var isFavorite by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf("") }
     var pinLat by remember { mutableDoubleStateOf(lat) }
     var pinLng by remember { mutableDoubleStateOf(lng) }
@@ -178,6 +180,7 @@ fun PinEditScreen(
                 selectedCategory = categories.find { it.id == pin.categoryId }
                 avatarPath = pin.avatarPath
                 address = pin.address ?: ""
+                isFavorite = pin.isFavorite
                 pinLat = pin.latitude
                 pinLng = pin.longitude
                 selectedCategory?.let { cat ->
@@ -358,6 +361,13 @@ fun PinEditScreen(
                             }
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "导出标记")
+                        }
+                        IconButton(onClick = { isFavorite = !isFavorite; markDirty() }) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = if (isFavorite) "取消星标" else "设为星标",
+                                tint = if (isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除标记")
@@ -609,8 +619,13 @@ fun PinEditScreen(
                                 val images = getImages(template)
                                 if (images.isNotEmpty()) {
                                     val rowState = rememberLazyListState()
+                                    var previousImageCount by remember { mutableIntStateOf(images.size) }
                                     LaunchedEffect(images.size) {
-                                        if (images.isNotEmpty()) rowState.animateScrollToItem(images.size - 1)
+                                        // 只在新增图片时滚到最后；删除时保持当前位置
+                                        if (images.size > previousImageCount) {
+                                            rowState.animateScrollToItem(images.size - 1)
+                                        }
+                                        previousImageCount = images.size
                                     }
                                     LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         itemsIndexed(images) { index, img ->
@@ -713,13 +728,13 @@ fun PinEditScreen(
                             }
                             val id = when {
                                 pinId == 0L -> {
-                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }))
+                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite))
                                     pinId = newId
                                     newId
                                 }
                                 else -> {
                                     pinRepository.getPinById(pinId)?.let { pin ->
-                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }))
+                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite))
                                     }
                                     pinId
                                 }

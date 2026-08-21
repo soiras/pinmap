@@ -170,6 +170,7 @@ object PinExporter {
                 put("title", pin.title)
                 put("description", pin.description ?: JSONObject.NULL)
                 put("address", pin.address ?: JSONObject.NULL)
+                put("isFavorite", pin.isFavorite)
                 pin.avatarPath?.let { path ->
                     resolveFilePath(path)?.let { put("avatarFile", addFile(it)) }
                 }

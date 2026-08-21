@@ -32,6 +32,9 @@ class PinListViewModel(
     private val mSelectedCategoryId = MutableStateFlow<Long?>(null)
     val _selectedCategoryId: StateFlow<Long?> = mSelectedCategoryId.asStateFlow()
 
+    private val mOnlyFavorite = MutableStateFlow(false)
+    val _onlyFavorite: StateFlow<Boolean> = mOnlyFavorite.asStateFlow()
+
     private val mSortMode = MutableStateFlow(SortMode.CREATED_DESC)
     val _sortMode: StateFlow<SortMode> = mSortMode.asStateFlow()
 
@@ -44,6 +47,7 @@ class PinListViewModel(
         mPins,
         mSearchQuery,
         mSelectedCategoryId,
+        mOnlyFavorite,
         mSortMode,
         mCurrentLat,
         mCurrentLng
@@ -51,14 +55,19 @@ class PinListViewModel(
         val pins = values[0] as List<Pin>
         val query = values[1] as String
         val categoryId = values[2] as Long?
-        val sort = values[3] as SortMode
-        val lat = values[4] as Double
-        val lng = values[5] as Double
+        val onlyFavorite = values[3] as Boolean
+        val sort = values[4] as SortMode
+        val lat = values[5] as Double
+        val lng = values[6] as Double
 
         var result = pins
 
         if (categoryId != null) {
             result = result.filter { it.categoryId == categoryId }
+        }
+
+        if (onlyFavorite) {
+            result = result.filter { it.isFavorite }
         }
 
         if (query.isNotBlank()) {
@@ -77,6 +86,21 @@ class PinListViewModel(
 
             SortMode.CREATED_DESC -> result = result.sortedByDescending { it.createdAt }
         }
+
+        // 星标置顶：星标标记始终排在最前
+        result = result.sortedWith(
+            compareByDescending<Pin> { it.isFavorite }
+                .thenComparator { a, b ->
+                    when (sort) {
+                        SortMode.NAME_ASC -> a.title.compareTo(b.title, ignoreCase = true)
+                        SortMode.NAME_DESC -> b.title.compareTo(a.title, ignoreCase = true)
+                        SortMode.DISTANCE_ASC ->
+                            haversineDistance(lat, lng, a.latitude, a.longitude)
+                                .compareTo(haversineDistance(lat, lng, b.latitude, b.longitude))
+                        SortMode.CREATED_DESC -> b.createdAt.compareTo(a.createdAt)
+                    }
+                }
+        )
 
         result
     }.stateIn(
@@ -116,6 +140,16 @@ class PinListViewModel(
 
     fun setSortMode(mode: SortMode) {
         mSortMode.value = mode
+    }
+
+    fun setOnlyFavorite(onlyFavorite: Boolean) {
+        mOnlyFavorite.value = onlyFavorite
+    }
+
+    fun toggleFavorite(pin: Pin) {
+        viewModelScope.launch {
+            mPinRepository.updatePin(pin.copy(isFavorite = !pin.isFavorite))
+        }
     }
 
     fun setCurrentLocation(lat: Double, lng: Double) {

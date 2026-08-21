@@ -29,7 +29,7 @@ import com.sinus.pinmap.data.entity.Pin
         Attachment::class,
         OfflineMap::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -77,6 +77,10 @@ abstract class PinmapDatabase : RoomDatabase() {
             db.execSQL("ALTER TABLE field_values_new RENAME TO field_values")
         }
 
+        val mMigration_7_8 = Migration(7, 8) { db ->
+            db.execSQL("ALTER TABLE pins ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
+        }
+
         fun getDatabase(context: Context): PinmapDatabase {
             return mInstance ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -84,7 +88,7 @@ abstract class PinmapDatabase : RoomDatabase() {
                     PinmapDatabase::class.java,
                     "pinmap_database"
                 )
-                    .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7)
+                    .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7, mMigration_7_8)
                     .build()
                 mInstance = instance
                 instance

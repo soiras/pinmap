@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -59,6 +60,7 @@ fun PinListScreen(
     val categories by viewModel._categories.collectAsState()
     val searchQuery by viewModel._searchQuery.collectAsState()
     val selectedCategoryId by viewModel._selectedCategoryId.collectAsState()
+    val onlyFavorite by viewModel._onlyFavorite.collectAsState()
     val sortMode by viewModel._sortMode.collectAsState()
 
     var showDeleteDialog by remember { mutableStateOf<Pin?>(null) }
@@ -108,6 +110,25 @@ fun PinListScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    FilterChip(
+                        selected = onlyFavorite,
+                        onClick = { viewModel.setOnlyFavorite(!onlyFavorite) },
+                        label = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = if (onlyFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text("星标")
+                            }
+                        },
+                        modifier = Modifier.height(FILTER_CHIP_HEIGHT)
+                    )
                     FilterChip(
                         selected = selectedCategoryId == null,
                         onClick = { viewModel.setSelectedCategory(null) },
@@ -233,6 +254,7 @@ fun PinListScreen(
                             pin.latitude, pin.longitude
                         ) / 1000f,
                         onClick = { onPinClick(pin.id) },
+                        onToggleFavorite = { viewModel.toggleFavorite(pin) },
                         onDelete = { showDeleteDialog = pin }
                     )
                 }
@@ -290,6 +312,7 @@ private fun PinItem(
     category: com.sinus.pinmap.data.entity.Category?,
     distanceKm: Float,
     onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -364,6 +387,18 @@ private fun PinItem(
                         )
                     }
                 }
+            }
+
+            IconButton(
+                onClick = onToggleFavorite,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (pin.isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Icon(
+                    Icons.Default.Star,
+                    contentDescription = if (pin.isFavorite) "取消星标" else "设为星标"
+                )
             }
 
             IconButton(

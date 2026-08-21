@@ -105,13 +105,14 @@ fun MapScreen(
     val pins by viewModel._pins.collectAsState()
     val categories by categoryRepository.getAllCategories().collectAsState(initial = emptyList())
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-    val filteredPins by remember(pins, selectedCategoryId) {
+    var mapOnlyFavorite by remember { mutableStateOf(false) }
+    val filteredPins by remember(pins, selectedCategoryId, mapOnlyFavorite) {
         derivedStateOf {
-            if (selectedCategoryId == null) {
-                pins
-            } else {
-                pins.filter { it.categoryId == selectedCategoryId }
+            var result = if (selectedCategoryId == null) pins else pins.filter { it.categoryId == selectedCategoryId }
+            if (mapOnlyFavorite) {
+                result = result.filter { it.isFavorite }
             }
+            result
         }
     }
 
@@ -724,6 +725,20 @@ fun MapScreen(
                     text = { Text("全部") },
                     onClick = { selectedCategoryId = null; showCategoryFilter = false },
                     leadingIcon = if (selectedCategoryId == null) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null
+                )
+                DropdownMenuItem(
+                    text = { Text("星标") },
+                    onClick = { mapOnlyFavorite = !mapOnlyFavorite; showCategoryFilter = false },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            tint = if (mapOnlyFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = if (mapOnlyFavorite) {
                         { Icon(Icons.Default.Check, contentDescription = null) }
                     } else null
                 )
