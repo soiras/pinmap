@@ -148,12 +148,13 @@ object PinImporter {
         Log.d(TAG, "media extracted: ${mediaPathMap.size}/${mediaEntries.size}")
 
         // 第三步：事务写入
-        val result = database.withTransaction {
-            Log.d(TAG, "db transaction start")
-            val categoryRepo = CategoryRepository(database.categoryStore())
-            val templateRepo = FieldTemplateRepository(database.fieldTemplateStore())
-            val pinRepo = PinRepository(database.pinStore())
-            val valueRepo = FieldValueRepository(database.fieldValueStore())
+        val result = try {
+            database.withTransaction {
+                Log.d(TAG, "db transaction start")
+                val categoryRepo = CategoryRepository(database.categoryStore())
+                val templateRepo = FieldTemplateRepository(database.fieldTemplateStore())
+                val pinRepo = PinRepository(database.pinStore())
+                val valueRepo = FieldValueRepository(database.fieldValueStore())
 
             var existingCategories = categoryRepo.getAllCategories().first()
             var newCategoryCount = 0
@@ -273,6 +274,16 @@ object PinImporter {
             }
 
             ImportResult(newCategoryCount, newTemplateCount, newPinCount, mediaCount, droppedValues)
+            }
+        } catch (e: Exception) {
+            // 事务失败：删除已解压的媒体文件，避免孤儿文件
+            Log.e(TAG, "db transaction failed, cleaning extracted media", e)
+            mediaPathMap.values.forEach { path ->
+                try {
+                    File(path.removePrefix("file://")).delete()
+                } catch (_: Exception) { }
+            }
+            throw e
         }
         Log.d(TAG, "import done: result=$result")
 

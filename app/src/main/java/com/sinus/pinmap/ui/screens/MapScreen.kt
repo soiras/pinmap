@@ -224,6 +224,7 @@ fun MapScreen(
     var renderedPins by remember { mutableStateOf<Map<Long, Pin>>(emptyMap()) }
     var poiHighlightLat by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightLng by remember { mutableDoubleStateOf(0.0) }
+    var poiHighlightMarker by remember { mutableStateOf<com.amap.api.maps.model.Marker?>(null) }
     var isDragging by remember { mutableStateOf(false) }
 
     // 位置权限请求
@@ -987,7 +988,9 @@ fun MapScreen(
     LaunchedEffect(poiHighlightLat, poiHighlightLng) {
         val aMap = mapHolder._aMap ?: return@LaunchedEffect
         if (poiHighlightLat != 0.0 || poiHighlightLng != 0.0) {
-            aMap.addMarker(
+            // 移除上一次的高亮标记，避免堆积
+            poiHighlightMarker?.remove()
+            poiHighlightMarker = aMap.addMarker(
                 MarkerOptions()
                     .position(LatLng(poiHighlightLat, poiHighlightLng))
                     .title("搜索结果")

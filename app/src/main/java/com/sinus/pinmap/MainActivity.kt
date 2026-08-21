@@ -113,8 +113,14 @@ class MainActivity : ComponentActivity() {
                         }
 
                         Box(Modifier.weight(1f)) {
+                            // 从 PinEdit 返回时读取聚焦坐标，传入地图
+                            val prevEntry = navController.previousBackStackEntry
+                            val focusLat = prevEntry?.savedStateHandle?.get<Double>("focusLat")
+                            val focusLng = prevEntry?.savedStateHandle?.get<Double>("focusLng")
                             MapScreen(
                                 modifier = Modifier.fillMaxSize().visible(selectedTabIndex == TAB_MAP),
+                                focusLat = focusLat,
+                                focusLng = focusLng,
                                 onNavigateToEdit = { pinId ->
                                     navController.navigate(Screen.PinEdit.createRoute(pinId))
                                 },

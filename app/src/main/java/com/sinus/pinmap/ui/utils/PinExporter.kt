@@ -117,6 +117,8 @@ object PinExporter {
         fileName: String
     ): Uri {
         val exportDir = File(context.cacheDir, "export").apply { mkdirs() }
+        // 清空旧导出文件，避免缓存累积和并发写同名文件
+        exportDir.listFiles()?.forEach { it.delete() }
         val exportFile = File(exportDir, fileName)
 
         val templateTypeMap = fieldTemplates.associate { it.id to it.fieldType }
