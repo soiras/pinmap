@@ -51,6 +51,7 @@ import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.services.poisearch.PoiSearchV2
 import com.sinus.pinmap.data.database.PinmapDatabase
+import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.utils.LocationManager
@@ -119,6 +120,23 @@ fun MapScreen(
         }
     }
 
+    // pinId -> 非媒体字段值文本（搜索匹配用）
+    var fieldTextByPin by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+
+    // 加载非媒体字段值文本，用于搜索匹配
+    LaunchedEffect(pins) {
+        val templates = fieldTemplateRepository.getAllFieldTemplates().first()
+        val textTemplateIds = templates
+            .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
+            .map { it.id }
+            .toSet()
+        val values = fieldValueRepository.getAllFieldValues().first()
+        fieldTextByPin = values
+            .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
+            .groupBy { it.pinId }
+            .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
+    }
+
     var searchQuery by remember { mutableStateOf("") }
     var showSearchResults by remember { mutableStateOf(false) }
     var aiResults by remember { mutableStateOf<List<Pin>>(emptyList()) }
@@ -161,7 +179,8 @@ fun MapScreen(
             } else {
                 pins.filter {
                     it.title.contains(searchQuery, ignoreCase = true) ||
-                            (it.description?.contains(searchQuery, ignoreCase = true) == true)
+                            (it.description?.contains(searchQuery, ignoreCase = true) == true) ||
+                            (fieldTextByPin[it.id]?.contains(searchQuery, ignoreCase = true) == true)
                 }
             }
         }

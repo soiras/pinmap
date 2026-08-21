@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sinus.pinmap.data.database.PinmapDatabase
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
+import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.utils.LocationManager
@@ -53,7 +54,8 @@ fun PinListScreen(
     val pinRepository = remember { PinRepository(database.pinStore()) }
     val categoryRepository = remember { CategoryRepository(database.categoryStore()) }
     val valueRepository = remember { FieldValueRepository(database.fieldValueStore()) }
-    val viewModel: PinListViewModel = viewModel { PinListViewModel(pinRepository, categoryRepository) }
+    val templateRepository = remember { FieldTemplateRepository(database.fieldTemplateStore()) }
+    val viewModel: PinListViewModel = viewModel { PinListViewModel(pinRepository, categoryRepository, valueRepository, templateRepository) }
     val scope = rememberCoroutineScope()
 
     val pins by viewModel.filteredPins.collectAsState()

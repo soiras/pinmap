@@ -3,8 +3,11 @@ package com.sinus.pinmap.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sinus.pinmap.data.entity.Category
+import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
+import com.sinus.pinmap.data.repository.FieldTemplateRepository
+import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.utils.haversineDistance
@@ -17,7 +20,9 @@ enum class SortMode {
 
 class PinListViewModel(
     private val mPinRepository: PinRepository,
-    private val mCategoryRepository: CategoryRepository
+    private val mCategoryRepository: CategoryRepository,
+    private val mFieldValueRepository: FieldValueRepository,
+    private val mFieldTemplateRepository: FieldTemplateRepository
 ) : ViewModel() {
 
     private val mPins = MutableStateFlow<List<Pin>>(emptyList())
@@ -25,6 +30,10 @@ class PinListViewModel(
 
     private val mCategories = MutableStateFlow<List<Category>>(emptyList())
     val _categories: StateFlow<List<Category>> = mCategories.asStateFlow()
+
+    // pinId -> 该标记所有非媒体字段值拼接的文本（用于搜索匹配）
+    private val mFieldTextByPin = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val _fieldTextByPin: StateFlow<Map<Long, String>> = mFieldTextByPin.asStateFlow()
 
     private val mSearchQuery = MutableStateFlow("")
     val _searchQuery: StateFlow<String> = mSearchQuery.asStateFlow()
@@ -50,7 +59,8 @@ class PinListViewModel(
         mOnlyFavorite,
         mSortMode,
         mCurrentLat,
-        mCurrentLng
+        mCurrentLng,
+        mFieldTextByPin
     ) { values: Array<Any?> ->
         val pins = values[0] as List<Pin>
         val query = values[1] as String
@@ -59,6 +69,7 @@ class PinListViewModel(
         val sort = values[4] as SortMode
         val lat = values[5] as Double
         val lng = values[6] as Double
+        val fieldTextByPin = values[7] as Map<Long, String>
 
         var result = pins
 
@@ -71,9 +82,10 @@ class PinListViewModel(
         }
 
         if (query.isNotBlank()) {
-            result = result.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                        (it.description?.contains(query, ignoreCase = true) == true)
+            result = result.filter { pin ->
+                pin.title.contains(query, ignoreCase = true) ||
+                        (pin.description?.contains(query, ignoreCase = true) == true) ||
+                        (fieldTextByPin[pin.id]?.contains(query, ignoreCase = true) == true)
             }
         }
 
@@ -112,6 +124,7 @@ class PinListViewModel(
     init {
         loadPins()
         loadCategories()
+        loadFieldText()
     }
 
     private fun loadPins() {
@@ -127,6 +140,24 @@ class PinListViewModel(
             mCategoryRepository.getAllCategories().collect { categoryList ->
                 mCategories.value = categoryList
             }
+        }
+    }
+
+    /**
+     * 加载全部字段值，构建 pinId -> 非媒体字段值文本 映射（用于搜索匹配）。
+     */
+    private fun loadFieldText() {
+        viewModelScope.launch {
+            val templates = mFieldTemplateRepository.getAllFieldTemplates().first()
+            val textTemplateIds = templates
+                .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
+                .map { it.id }
+                .toSet()
+            val values = mFieldValueRepository.getAllFieldValues().first()
+            mFieldTextByPin.value = values
+                .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
+                .groupBy { it.pinId }
+                .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
         }
     }
 
