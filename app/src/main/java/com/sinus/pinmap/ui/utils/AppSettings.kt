@@ -11,6 +11,7 @@ object AppSettings {
     private const val PREFS_NAME = "app_settings"
     private const val KEY_OLLAMA_BASE_URL = "ollama_base_url"
     private const val KEY_OLLAMA_MODEL = "ollama_model"
+    private const val KEY_AI_SEARCH_ENABLED = "ai_search_enabled"
     private const val DEFAULT_OLLAMA_BASE_URL = "http://192.168.1.103:11434"
     private const val DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
 
@@ -18,6 +19,15 @@ object AppSettings {
 
     fun init(context: Context) {
         mPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    fun isAiSearchEnabled(): Boolean =
+        if (::mPrefs.isInitialized) mPrefs.getBoolean(KEY_AI_SEARCH_ENABLED, false) else false
+
+    fun setAiSearchEnabled(enabled: Boolean) {
+        if (::mPrefs.isInitialized) {
+            mPrefs.edit { putBoolean(KEY_AI_SEARCH_ENABLED, enabled) }
+        }
     }
 
     fun getOllamaBaseUrl(): String =

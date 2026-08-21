@@ -57,6 +57,8 @@ import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.viewmodel.MapHolderViewModel
 import com.sinus.pinmap.ui.viewmodel.MapViewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -74,6 +76,7 @@ import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.ui.utils.AiSearchClient
+import com.sinus.pinmap.ui.utils.AppSettings
 import com.sinus.pinmap.ui.utils.AuthState
 
 /**
@@ -121,6 +124,28 @@ fun MapScreen(
     var aiResults by remember { mutableStateOf<List<Pin>>(emptyList()) }
     var isAiSearching by remember { mutableStateOf(false) }
     var aiSearchError by remember { mutableStateOf<String?>(null) }
+    var aiSearchJob by remember { mutableStateOf<Job?>(null) }
+    var aiQuery by remember { mutableStateOf("") }
+
+    fun cancelAiSearch() {
+        aiSearchJob?.cancel()
+        aiSearchJob = null
+        isAiSearching = false
+        aiResults = emptyList()
+        aiSearchError = null
+        aiQuery = ""
+    }
+
+    // 查询词变化时清空上一次的 AI 结果，避免残留
+    LaunchedEffect(searchQuery) {
+        if (searchQuery != aiQuery) {
+            aiSearchJob?.cancel()
+            aiSearchJob = null
+            isAiSearching = false
+            aiResults = emptyList()
+            aiSearchError = null
+        }
+    }
 
     // 键盘控制器和焦点请求器
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -404,8 +429,8 @@ fun MapScreen(
                 .align(Alignment.BottomCenter)
                 .padding(start = 16.dp, end = 16.dp, bottom = searchBottom)
         ) {
-            // 搜索结果列表
-            val aiSearchActive = isAiSearching || aiResults.isNotEmpty() || aiSearchError != null
+            // 搜索结果列表：AI 结果只在"查询词与当前输入一致"时显示，避免残留
+            val aiSearchActive = aiQuery.isNotBlank() && searchQuery == aiQuery
             if (showSearchResults && (aiSearchActive || searchResults.isNotEmpty() || poiResults.isNotEmpty())) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -459,6 +484,7 @@ fun MapScreen(
                                                         LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
                                                     )
                                                 )
+                                                cancelAiSearch()
                                                 showSearchResults = false; searchQuery = ""; keyboardController?.hide()
                                             }
                                         }
@@ -506,6 +532,7 @@ fun MapScreen(
                                                         ), ZOOM_SEARCH
                                                     )
                                                 )
+                                                cancelAiSearch()
                                                 showSearchResults = false; searchQuery =
                                                 ""; keyboardController?.hide()
                                             }
@@ -558,6 +585,7 @@ fun MapScreen(
                                                     ), ZOOM_SEARCH
                                                 )
                                             )
+                                            cancelAiSearch()
                                             showSearchResults = false; searchQuery =
                                             ""; keyboardController?.hide()
                                         }
@@ -609,6 +637,9 @@ fun MapScreen(
                         onValueChange = { newValue: String ->
                             searchQuery = newValue
                             showSearchResults = newValue.isNotBlank()
+                            if (newValue.isBlank()) {
+                                cancelAiSearch()
+                            }
                         },
                         placeholder = { Text("搜索标记...") },
                         modifier = Modifier
@@ -629,6 +660,7 @@ fun MapScreen(
                                                 ZOOM_SEARCH
                                             )
                                         )
+                                        cancelAiSearch()
                                         showSearchResults = false
                                         searchQuery = ""
                                         keyboardController?.hide()
@@ -645,20 +677,20 @@ fun MapScreen(
                     if (searchQuery.isNotBlank()) {
                         IconButton(
                             onClick = {
+                                cancelAiSearch()
                                 searchQuery = ""
                                 showSearchResults = false
-                                aiResults = emptyList()
-                                aiSearchError = null
                             }
                         ) {
                             Icon(Icons.Default.Close, contentDescription = "清除搜索")
                         }
                     }
 
-                    if (searchQuery.isNotBlank()) {
+                    if (searchQuery.isNotBlank() && AppSettings.isAiSearchEnabled()) {
                         IconButton(
                             onClick = {
-                                scope.launch {
+                                aiQuery = searchQuery
+                                aiSearchJob = scope.launch {
                                     isAiSearching = true
                                     aiSearchError = null
                                     showSearchResults = true
@@ -680,6 +712,7 @@ fun MapScreen(
                                         aiResults = pins.filter { it.id in idSet }
                                             .sortedBy { result.pinIds.indexOf(it.id) }
                                     } catch (e: Exception) {
+                                        if (e is kotlinx.coroutines.CancellationException) throw e
                                         aiSearchError = "AI 搜索失败：${e.message}"
                                         aiResults = emptyList()
                                     }

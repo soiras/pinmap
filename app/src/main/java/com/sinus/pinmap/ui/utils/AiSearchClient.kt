@@ -7,6 +7,7 @@ import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.FieldValue
 import com.sinus.pinmap.data.entity.Pin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -15,6 +16,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 /**
  * 基于本地 Ollama LLM 的意图搜索。
@@ -163,6 +165,10 @@ object AiSearchClient {
                 Log.d(TAG, "response received in ${System.currentTimeMillis() - startTime}ms, length=${it.length}")
             }
         } catch (e: Exception) {
+            // 协程已被取消（用户点了取消/改了搜索词）：转成取消异常，不当作业务失败
+            if (e is kotlinx.coroutines.CancellationException || coroutineContext.isActive.not()) {
+                throw kotlinx.coroutines.CancellationException("AI search cancelled")
+            }
             Log.e(TAG, "Ollama request failed", e)
             throw e
         }

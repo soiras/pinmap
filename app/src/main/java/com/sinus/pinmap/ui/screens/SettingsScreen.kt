@@ -110,7 +110,20 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            Text("AI 搜索", style = MaterialTheme.typography.titleLarge)
+            var aiEnabled by remember { mutableStateOf(AppSettings.isAiSearchEnabled()) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("AI 搜索", style = MaterialTheme.typography.titleLarge)
+                Switch(
+                    checked = aiEnabled,
+                    onCheckedChange = { /* 暂时锁定，不可修改 */ },
+                    enabled = false
+                )
+            }
+            val aiConfigEnabled = aiEnabled
             Text(
                 "使用本地 Ollama 进行意图搜索。需与 Ollama 处于同一局域网。",
                 style = MaterialTheme.typography.bodyMedium,
@@ -124,6 +137,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 onValueChange = { ollamaUrl = it; aiConfigChanged = true },
                 label = { Text("Ollama 地址") },
                 singleLine = true,
+                enabled = aiConfigEnabled,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
@@ -134,6 +148,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 onValueChange = { ollamaModel = it; aiConfigChanged = true },
                 label = { Text("模型名称") },
                 singleLine = true,
+                enabled = aiConfigEnabled,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -146,7 +161,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     aiConfigChanged = false
                     Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                 },
-                enabled = aiConfigChanged,
+                enabled = aiConfigChanged && aiConfigEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("保存 AI 配置") }
 
