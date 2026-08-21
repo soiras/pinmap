@@ -1,5 +1,6 @@
 package com.sinus.pinmap.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sinus.pinmap.data.entity.Category
@@ -144,20 +145,29 @@ class PinListViewModel(
     }
 
     /**
-     * 加载全部字段值，构建 pinId -> 非媒体字段值文本 映射（用于搜索匹配）。
+     * 订阅字段值变化，构建 pinId -> 非媒体字段值文本 映射（用于搜索匹配）。
+     * 每次重建时重新读模板，保证新建字段也能参与索引。
      */
     private fun loadFieldText() {
         viewModelScope.launch {
-            val templates = mFieldTemplateRepository.getAllFieldTemplates().first()
-            val textTemplateIds = templates
-                .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
-                .map { it.id }
-                .toSet()
-            val values = mFieldValueRepository.getAllFieldValues().first()
-            mFieldTextByPin.value = values
-                .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
-                .groupBy { it.pinId }
-                .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
+            mFieldValueRepository.getAllFieldValues().collect { values ->
+                // 每次重建都重新取模板，避免新建字段后索引不包含新模板
+                val templates = mFieldTemplateRepository.getAllFieldTemplates().first()
+                val textTemplateIds = templates
+                    .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
+                    .map { it.id }
+                    .toSet()
+                mFieldTextByPin.value = values
+                    .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
+                    .groupBy { it.pinId }
+                    .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
+                Log.d("Sinus-PinList", "fieldTextByPin updated: templates=$textTemplateIds, values=${values.size}, map=${mFieldTextByPin.value}")
+                // 找出被过滤的字段值（调试用）
+                val filtered = values.filter { it.fieldTemplateId !in textTemplateIds }
+                if (filtered.isNotEmpty()) {
+                    Log.d("Sinus-PinList", "filtered out templateIds=${filtered.map { it.fieldTemplateId }.distinct()}, sample=${filtered.take(5).map { "${it.pinId}:${it.value}" }}")
+                }
+            }
         }
     }
 

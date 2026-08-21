@@ -89,6 +89,8 @@ abstract class PinmapDatabase : RoomDatabase() {
                     "pinmap_database"
                 )
                     .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7, mMigration_7_8)
+                    // 老版本（如 v2）无迁移路径时直接重建数据库，避免启动崩溃
+                    .fallbackToDestructiveMigration()
                     .build()
                 mInstance = instance
                 instance

@@ -274,7 +274,12 @@ fun FieldTemplatesScreen(
             text = { Text("确定要删除字段「${template.fieldName}」吗？\n\n这将同时删除所有标记中该字段的值。") },
             confirmButton = {
                 Button(onClick = {
-                    scope.launch { templateRepo.deleteFieldTemplate(template); load() }
+                    scope.launch {
+                        // 先删该模板的所有字段值，再删模板本身
+                        valueRepo.deleteFieldValuesByTemplate(template.id)
+                        templateRepo.deleteFieldTemplate(template)
+                        load()
+                    }
                     templateToDelete = null
                 }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("删除") }
             },

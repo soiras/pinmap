@@ -122,18 +122,20 @@ fun MapScreen(
     // pinId -> 非媒体字段值文本（搜索匹配用）
     var fieldTextByPin by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
-    // 加载非媒体字段值文本，用于搜索匹配
-    LaunchedEffect(pins) {
-        val templates = fieldTemplateRepository.getAllFieldTemplates().first()
-        val textTemplateIds = templates
-            .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
-            .map { it.id }
-            .toSet()
-        val values = fieldValueRepository.getAllFieldValues().first()
-        fieldTextByPin = values
-            .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
-            .groupBy { it.pinId }
-            .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
+    // 加载非媒体字段值文本，用于搜索匹配（字段值变化即重建，模板每次重读）
+    LaunchedEffect(Unit) {
+        fieldValueRepository.getAllFieldValues().collect { values ->
+            val templates = fieldTemplateRepository.getAllFieldTemplates().first()
+            val textTemplateIds = templates
+                .filter { it.fieldType != FieldType.IMAGE && it.fieldType != FieldType.VIDEO }
+                .map { it.id }
+                .toSet()
+            fieldTextByPin = values
+                .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
+                .groupBy { it.pinId }
+                .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
+            Log.d("Sinus-Map", "fieldTextByPin built: templates=$textTemplateIds, values=${values.size}, map=${fieldTextByPin}")
+        }
     }
 
     var searchQuery by remember { mutableStateOf("") }
