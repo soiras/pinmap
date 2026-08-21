@@ -59,7 +59,6 @@ import com.sinus.pinmap.ui.viewmodel.MapHolderViewModel
 import com.sinus.pinmap.ui.viewmodel.MapViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -504,7 +503,7 @@ fun MapScreen(
                                                     )
                                                 )
                                                 cancelAiSearch()
-                                                showSearchResults = false; searchQuery = ""; keyboardController?.hide()
+                                                showSearchResults = false; keyboardController?.hide()
                                             }
                                         }
                                 ) {
@@ -552,8 +551,8 @@ fun MapScreen(
                                                     )
                                                 )
                                                 cancelAiSearch()
-                                                showSearchResults = false; searchQuery =
-                                                ""; keyboardController?.hide()
+                                                showSearchResults = false
+                                                keyboardController?.hide()
                                             }
                                         }
                                 ) {
@@ -605,8 +604,8 @@ fun MapScreen(
                                                 )
                                             )
                                             cancelAiSearch()
-                                            showSearchResults = false; searchQuery =
-                                            ""; keyboardController?.hide()
+                                            showSearchResults = false
+                                            keyboardController?.hide()
                                         }
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
@@ -668,22 +667,9 @@ fun MapScreen(
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
                             onSearch = {
-                                if (searchResults.isNotEmpty()) {
-                                    scope.launch {
-                                        val pin = searchResults.first()
-                                        val aMap = mapHolder._aMap ?: return@launch
-                                        val latLng = LatLng(pin.latitude, pin.longitude)
-                                        aMap.animateCamera(
-                                            CameraUpdateFactory.newLatLngZoom(
-                                                latLng,
-                                                ZOOM_SEARCH
-                                            )
-                                        )
-                                        cancelAiSearch()
-                                        showSearchResults = false
-                                        searchQuery = ""
-                                        keyboardController?.hide()
-                                    }
+                                // 手动触发搜索：展开结果列表
+                                if (searchQuery.isNotBlank()) {
+                                    showSearchResults = true
                                 }
                             }
                         ),
