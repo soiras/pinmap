@@ -492,37 +492,23 @@ fun MapScreen(
                                 )
                             }
                             items(aiResults) { pin ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(8.dp)
-                                        .clickable {
-                                            scope.launch {
-                                                val aMap = mapHolder._aMap ?: return@launch
-                                                highlightedPinId = pin.id
-                                                aMap.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
-                                                    )
+                                SearchResultItem(
+                                    title = pin.title,
+                                    subtitle = pin.address,
+                                    onClick = {
+                                        scope.launch {
+                                            val aMap = mapHolder._aMap ?: return@launch
+                                            highlightedPinId = pin.id
+                                            aMap.animateCamera(
+                                                CameraUpdateFactory.newLatLngZoom(
+                                                    LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
                                                 )
-                                                cancelAiSearch()
-                                                showSearchResults = false; keyboardController?.hide()
-                                            }
-                                        }
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(text = pin.title, style = MaterialTheme.typography.titleMedium)
-                                        pin.address?.let {
-                                            Text(
-                                                text = it,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
                                             )
+                                            cancelAiSearch()
+                                            showSearchResults = false; keyboardController?.hide()
                                         }
                                     }
-                                }
+                                )
                             }
                         } else if (searchResults.isNotEmpty()) {
                             item {
@@ -537,44 +523,24 @@ fun MapScreen(
                                 )
                             }
                             items(searchResults) { pin ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(8.dp)
-                                        .clickable {
-                                            scope.launch {
-                                                val aMap = mapHolder._aMap ?: return@launch
-                                                highlightedPinId = pin.id
-                                                aMap.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(
-                                                            pin.latitude,
-                                                            pin.longitude
-                                                        ), ZOOM_SEARCH
-                                                    )
+                                SearchResultItem(
+                                    title = pin.title,
+                                    subtitle = pin.address,
+                                    onClick = {
+                                        scope.launch {
+                                            val aMap = mapHolder._aMap ?: return@launch
+                                            highlightedPinId = pin.id
+                                            aMap.animateCamera(
+                                                CameraUpdateFactory.newLatLngZoom(
+                                                    LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
                                                 )
-                                                cancelAiSearch()
-                                                showSearchResults = false
-                                                keyboardController?.hide()
-                                            }
-                                        }
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = pin.title,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        pin.address?.let {
-                                            Text(
-                                                text = it,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
                                             )
+                                            cancelAiSearch()
+                                            showSearchResults = false
+                                            keyboardController?.hide()
                                         }
                                     }
-                                }
+                                )
                             }
                         }
                         if (poiResults.isNotEmpty()) {
@@ -590,12 +556,12 @@ fun MapScreen(
                                 )
                             }
                             items(poiResults) { poi ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(8.dp)
-                                        .clickable {
-                                            val aMap = mapHolder._aMap ?: return@clickable
+                                SearchResultItem(
+                                    title = poi.title,
+                                    subtitle = poi.snippet,
+                                    onClick = {
+                                        val aMap = mapHolder._aMap
+                                        if (aMap != null) {
                                             poiHighlightLat = poi.latLonPoint.latitude
                                             poiHighlightLng = poi.latLonPoint.longitude
                                             aMap.animateCamera(
@@ -610,20 +576,8 @@ fun MapScreen(
                                             showSearchResults = false
                                             keyboardController?.hide()
                                         }
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = poi.title,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Text(
-                                            text = poi.snippet,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
                                     }
-                                }
+                                )
                             }
                         }
                     }
@@ -1045,6 +999,36 @@ private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
 private val NAV_BAR_GAP = 80.dp
 private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
+private val SEARCH_ITEM_V_MARGIN = 0.dp
+private val SEARCH_ITEM_H_PADDING = 12.dp
+private val SEARCH_ITEM_V_PADDING = 8.dp
+
+@Composable
+private fun SearchResultItem(
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = SEARCH_ITEM_V_MARGIN)
+            .clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = SEARCH_ITEM_H_PADDING, vertical = SEARCH_ITEM_V_PADDING)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
 private val FAB_SIZE = 30.dp
 private val FAB_ICON_SIZE = 18.dp
 private val ICON_SIZE_20 = 20.dp
