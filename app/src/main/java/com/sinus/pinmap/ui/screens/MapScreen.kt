@@ -926,8 +926,8 @@ fun MapScreen(
                     }
                 }
 
-                // Arrow
-                paint.color = color
+                // Arrow：有标记时用三态色，避免被相邻图标盖住后看不出状态
+                paint.color = markBorderColor ?: color
                 val cx = size / 2f
                 val arrowPath = android.graphics.Path().apply {
                     val arrowTop = if (avatarBitmap != null) size - PADDING_4F else totalH - arrowH - PADDING_4F
