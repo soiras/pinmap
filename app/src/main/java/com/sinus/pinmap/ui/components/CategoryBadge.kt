@@ -1,6 +1,5 @@
 package com.sinus.pinmap.ui.components
 
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,7 +13,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
-import java.io.File
 
 /**
  * 分类标识：有自定义图片时显示圆形图片，否则显示纯色圆点。
@@ -39,7 +37,7 @@ fun CategoryBadge(
         val path = iconPath
         if (!path.isNullOrBlank()) {
             AsyncImage(
-                model = if (path.startsWith("file://")) Uri.parse(path) else File(path),
+                model = categoryIconModel(path),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

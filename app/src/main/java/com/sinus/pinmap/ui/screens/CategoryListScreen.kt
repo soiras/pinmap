@@ -2,24 +2,19 @@ package com.sinus.pinmap.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -31,6 +26,7 @@ import com.sinus.pinmap.data.database.PinmapDatabase
 import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.ui.components.CategoryBadge
+import com.sinus.pinmap.ui.components.CategoryColorGrid
 import com.sinus.pinmap.ui.theme.CategoryPresetColors
 import com.sinus.pinmap.ui.utils.CategoryIconStore
 import com.sinus.pinmap.ui.viewmodel.CategoryViewModel
@@ -172,46 +168,18 @@ fun CategoryListScreen(
                         label = { Text("分类名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("选择颜色", style = MaterialTheme.typography.bodyMedium)
+                    Text("选择颜色或图片", style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Column {
-                        CategoryPresetColors.chunked(4).forEach { rowColors ->
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                rowColors.forEach { color ->
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f).aspectRatio(1f)
-                                            .clickable { editColor = color }
-                                            .background(color, CircleShape)
-                                            .then(if (color == editColor) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (color == editColor) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
+                    CategoryColorGrid(
+                        selectedColor = editColor,
+                        iconPath = editIcon,
+                        onColorSelected = { editColor = it },
+                        onPickIcon = { editIconPicker.launch("image/*") },
+                        onClearIcon = {
+                            CategoryIconStore.delete(context, editIcon)
+                            editIcon = null
                         }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        CategoryBadge(color = editColor.hashCode(), iconPath = editIcon, size = 48.dp)
-                        TextButton(onClick = { editIconPicker.launch("image/*") }) {
-                            Text(if (editIcon == null) "选择图片" else "更换图片")
-                        }
-                        if (editIcon != null) {
-                            TextButton(
-                                onClick = {
-                                    CategoryIconStore.delete(context, editIcon)
-                                    editIcon = null
-                                }
-                            ) { Text("清除") }
-                        }
-                    }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { categoryToEdit = null }) { Text("取消") }

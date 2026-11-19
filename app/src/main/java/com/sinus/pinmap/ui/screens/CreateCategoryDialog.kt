@@ -2,23 +2,30 @@ package com.sinus.pinmap.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-
-import com.sinus.pinmap.ui.components.CategoryBadge
+import com.sinus.pinmap.ui.components.CategoryColorGrid
 import com.sinus.pinmap.ui.theme.CategoryPresetColors
 import com.sinus.pinmap.ui.utils.CategoryIconStore
 
@@ -63,7 +70,6 @@ fun CreateCategoryDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 名称输入框
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -74,66 +80,26 @@ fun CreateCategoryDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 颜色选择器
                 Text(
-                    text = "选择颜色",
+                    text = "选择颜色或图片",
                     style = MaterialTheme.typography.bodyMedium
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 颜色网格
-                Column {
-                    val columns = 4
-                    CategoryPresetColors.chunked(columns).forEach { rowColors ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            rowColors.forEach { color ->
-                                ColorOption(
-                                    color = color,
-                                    isSelected = color == selectedColor,
-                                    onClick = { selectedColor = color },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
+                CategoryColorGrid(
+                    selectedColor = selectedColor,
+                    iconPath = iconPath,
+                    onColorSelected = { selectedColor = it },
+                    onPickIcon = { iconPicker.launch("image/*") },
+                    onClearIcon = {
+                        CategoryIconStore.delete(context, iconPath)
+                        iconPath = null
                     }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 图标：纯色圆点或自定义图片
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CategoryBadge(
-                        color = selectedColor.hashCode(),
-                        iconPath = iconPath,
-                        size = 48.dp
-                    )
-                    TextButton(onClick = { iconPicker.launch("image/*") }) {
-                        Text(if (iconPath == null) "选择图片" else "更换图片")
-                    }
-                    if (iconPath != null) {
-                        TextButton(
-                            onClick = {
-                                CategoryIconStore.delete(context, iconPath)
-                                iconPath = null
-                            }
-                        ) {
-                            Text("清除")
-                        }
-                    }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 按钮
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -152,46 +118,6 @@ fun CreateCategoryDialog(
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * 颜色选项
- */
-@Composable
-private fun ColorOption(
-    color: Color,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clickable(onClick = onClick)
-            .background(color, CircleShape)
-            .then(
-                if (isSelected) {
-                    Modifier.border(
-                        width = 3.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = CircleShape
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isSelected) {
-            // 选中指示器
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 }
