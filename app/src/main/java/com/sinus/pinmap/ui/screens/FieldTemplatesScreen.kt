@@ -104,6 +104,8 @@ fun FieldTemplatesScreen(
 
     /** 重写所有模板的 rowKey 与 sortOrder，顺序即新行序、行内顺序 */
     suspend fun persistRows(newRows: List<List<FieldTemplate>>) {
+        // 先落到界面，再写库；否则松手瞬间会先闪回原位再跳到新位置
+        rows = newRows
         var order = 0
         newRows.forEach { row ->
             val key: Long? = if (row.size <= 1) null else (row.first().rowKey ?: row.first().id)
@@ -124,6 +126,7 @@ fun FieldTemplatesScreen(
     }
 
     fun splitRow(row: List<FieldTemplate>) {
+        rows = rows.flatMap { r -> if (r === row) r.map { listOf(it) } else listOf(r) }
         scope.launch {
             row.forEach { template -> templateRepo.updateFieldTemplate(template.copy(rowKey = null)) }
             val list = templateRepo.getFieldTemplatesByCategory(categoryId).first()
@@ -132,6 +135,14 @@ fun FieldTemplatesScreen(
     }
 
     fun unmerge(template: FieldTemplate) {
+        rows = rows.flatMap { r ->
+            if (r.any { it.id == template.id }) {
+                val rest = r.filter { it.id != template.id }
+                if (rest.isEmpty()) listOf(listOf(template)) else listOf(rest, listOf(template))
+            } else {
+                listOf(r)
+            }
+        }
         scope.launch {
             templateRepo.updateFieldTemplate(template.copy(rowKey = null))
             val list = templateRepo.getFieldTemplatesByCategory(categoryId).first()
@@ -150,6 +161,8 @@ fun FieldTemplatesScreen(
         val targetAt = newRows.indexOfFirst { rowGroupKey(it.first()) == targetKey }
         if (targetAt < 0) return
         newRows.add(if (insertBefore) targetAt else targetAt + 1, moved)
+        // 同一帧内更新界面，避免松手瞬间先闪回原位
+        rows = newRows
         scope.launch { persistRows(newRows) }
     }
 
@@ -159,6 +172,7 @@ fun FieldTemplatesScreen(
         val field = newRows.removeAt(fromIndex).first()
         val targetAt = if (targetIndex > fromIndex) targetIndex - 1 else targetIndex
         newRows[targetAt] = newRows[targetAt] + listOf(field)
+        rows = newRows
         scope.launch {
             persistRows(newRows)
             toast("已并成一行")
@@ -185,7 +199,9 @@ fun FieldTemplatesScreen(
             } ?: current.size
             val to = if (insertAt > fromIndex) insertAt - 1 else insertAt
             if (to != fromIndex) {
-                scope.launch { persistRows(moveRow(current, fromIndex, to)) }
+                val movedRows = moveRow(current, fromIndex, to)
+                rows = movedRows
+                scope.launch { persistRows(movedRows) }
             }
             return
         }
@@ -266,16 +282,6 @@ fun FieldTemplatesScreen(
                         Text("还没有字段模板", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    Text(
-                        text = if (draggingKey != null) {
-                            "拖到卡片中间合并（最多 $MAX_FIELDS_PER_ROW 个），拖到卡片上下边缘则换行"
-                        } else {
-                            "长按拖动可排序；把一个字段拖到另一个字段上可并成一行（最多 $MAX_FIELDS_PER_ROW 个）"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (draggingKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -296,6 +302,7 @@ fun FieldTemplatesScreen(
                             val insertLineColor = MaterialTheme.colorScheme.secondary
                             Card(
                                 modifier = Modifier
+                                    .animateItem()
                                     .border(
                                         width = if (hovered) 2.dp else 0.dp,
                                         color = when {
@@ -375,13 +382,7 @@ fun FieldTemplatesScreen(
                                     }
                                 } else {
                                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "${row.size} 个字段",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                             TextButton(onClick = { splitRow(row) }) { Text("拆行") }
                                         }
                                         Row(
