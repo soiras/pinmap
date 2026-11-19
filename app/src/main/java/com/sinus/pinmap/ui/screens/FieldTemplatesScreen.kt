@@ -18,8 +18,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
@@ -41,6 +44,7 @@ import com.sinus.pinmap.ui.groupFieldRows
 import com.sinus.pinmap.ui.hasFullRowField
 import com.sinus.pinmap.ui.rowGroupKey
 import com.sinus.pinmap.ui.utils.PinExporter
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -48,6 +52,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** 拖动框中线落在目标卡片中线上下各 1/3 高度内，才算「融合」，否则按上下半区换行 */
+private const val MERGE_BAND_RATIO = 1f / 3f
+
+/** 换行提示线的粗细 */
+private const val INSERT_LINE_HEIGHT_DP = 3
+
 @Composable
 fun FieldTemplatesScreen(
     categoryId: Long,
@@ -70,8 +80,6 @@ fun FieldTemplatesScreen(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var dropPoint by remember { mutableStateOf(Offset.Zero) }
     var hoverKey by remember { mutableStateOf<Long?>(null) }
-    // 长按点相对卡片左上角的偏移，用来把手指位置换算到 root 坐标
-    var grabInRoot by remember { mutableStateOf(Offset.Zero) }
     val rowBounds = remember { mutableStateMapOf<Long, Rect>() }
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableStateOf(0f) }
@@ -132,10 +140,33 @@ fun FieldTemplatesScreen(
     fun hitTestRow(excludeKey: Long, point: Offset): Long? =
         rowBounds.entries.firstOrNull { it.key != excludeKey && it.value.contains(point) }?.key
 
+    /** 整行换位：把 fromIndex 那行插到 targetKey 那行的前/后 */
+    fun reorderRow(current: List<List<FieldTemplate>>, fromIndex: Int, targetKey: Long, insertBefore: Boolean) {
+        val newRows = current.toMutableList()
+        val moved = newRows.removeAt(fromIndex)
+        val targetAt = newRows.indexOfFirst { rowGroupKey(it.first()) == targetKey }
+        if (targetAt < 0) return
+        newRows.add(if (insertBefore) targetAt else targetAt + 1, moved)
+        scope.launch { persistRows(newRows) }
+    }
+
+    /** 单字段并入目标行，目标行排在其原有位置 */
+    fun mergeIntoRow(current: List<List<FieldTemplate>>, fromIndex: Int, targetIndex: Int) {
+        val newRows = current.toMutableList()
+        val field = newRows.removeAt(fromIndex).first()
+        val targetAt = if (targetIndex > fromIndex) targetIndex - 1 else targetIndex
+        newRows[targetAt] = newRows[targetAt] + listOf(field)
+        scope.launch {
+            persistRows(newRows)
+            toast("已并成一行")
+        }
+    }
+
     fun finishDrag() {
         val key = draggingKey
         draggingKey = null
         dragOffset = Offset.Zero
+        hoverKey = null
         if (key == null) return
         val current = rows
         val fromIndex = current.indexOfFirst { rowGroupKey(it.first()) == key }
@@ -144,6 +175,7 @@ fun FieldTemplatesScreen(
         val targetKey = hitTestRow(key, dropPoint)
         val targetIndex = if (targetKey == null) -1 else current.indexOfFirst { rowGroupKey(it.first()) == targetKey }
 
+        // 没压在任何卡片上：按中线 Y 找插入位置
         if (targetIndex < 0) {
             val insertAt = current.indices.firstOrNull { i ->
                 rowBounds[rowGroupKey(current[i].first())]?.center?.y?.let { it > dropPoint.y } == true
@@ -154,28 +186,22 @@ fun FieldTemplatesScreen(
             }
             return
         }
+        val hitKey = targetKey ?: return
         if (targetIndex == fromIndex) return
         val target = current[targetIndex]
+        val targetRect = rowBounds[hitKey] ?: return
+        val insertBefore = dropPoint.y < targetRect.center.y
+        // 只有拖动框中线进入目标卡片中线区间才允许融合；上下两侧留出来做换行
+        val inMergeBand = abs(dropPoint.y - targetRect.center.y) <= targetRect.height * MERGE_BAND_RATIO
 
+        if (dragged.size > 1 || !inMergeBand) {
+            reorderRow(current, fromIndex, hitKey, insertBefore)
+            return
+        }
         when {
-            dragged.size > 1 -> scope.launch { persistRows(moveRow(current, fromIndex, targetIndex)) }
-
-            dragged.hasFullRowField() || target.hasFullRowField() ->
-                toast("图片/视频字段需要独占一行")
-
-            target.size >= MAX_FIELDS_PER_ROW ->
-                toast("一行最多 $MAX_FIELDS_PER_ROW 个字段")
-
-            else -> {
-                // 单字段拖到同行位置的卡片上：并入目标行
-                val newRows = current.toMutableList()
-                newRows[targetIndex] = target + dragged
-                newRows.removeAt(fromIndex)
-                scope.launch {
-                    persistRows(newRows)
-                    toast("已并成一行")
-                }
-            }
+            dragged.hasFullRowField() || target.hasFullRowField() -> toast("图片/视频字段需要独占一行")
+            target.size >= MAX_FIELDS_PER_ROW -> toast("一行最多 $MAX_FIELDS_PER_ROW 个字段")
+            else -> mergeIntoRow(current, fromIndex, targetIndex)
         }
     }
 
@@ -239,7 +265,7 @@ fun FieldTemplatesScreen(
                 } else {
                     Text(
                         text = if (draggingKey != null) {
-                            "松手到高亮的卡片上即可合并，最多 $MAX_FIELDS_PER_ROW 个"
+                            "拖到卡片中间合并（最多 $MAX_FIELDS_PER_ROW 个），拖到卡片上下边缘则换行"
                         } else {
                             "长按拖动可排序；把一个字段拖到另一个字段上可并成一行（最多 $MAX_FIELDS_PER_ROW 个）"
                         },
@@ -254,22 +280,42 @@ fun FieldTemplatesScreen(
                         itemsIndexed(rows, key = { _, row -> rowGroupKey(row.first()) }) { _, row ->
                             val key = rowGroupKey(row.first())
                             val isDragging = draggingKey == key
-                            val hovered = hoverKey == key
+                            val hovered = hoverKey == key && draggingKey != null
                             val draggedRow = rows.firstOrNull { rowGroupKey(it.first()) == draggingKey }
+                            val targetRect = rowBounds[key]
+                            val centerOffset = if (targetRect != null) dropPoint.y - targetRect.center.y else 0f
+                            val inMergeBand = hovered && targetRect != null &&
+                                abs(centerOffset) <= targetRect.height * MERGE_BAND_RATIO
+                            val insertBefore = hovered && !inMergeBand && centerOffset < 0
                             // 整行拖动时任何落点都合法；单字段拖进满行或含媒体字段的行才提示不可合并
-                            val hoverInvalid = hovered && draggedRow != null && draggedRow.size == 1 &&
+                            val hoverInvalid = inMergeBand && draggedRow != null && draggedRow.size == 1 &&
                                 (row.hasFullRowField() || draggedRow.hasFullRowField() || row.size >= MAX_FIELDS_PER_ROW)
+                            val insertLineColor = MaterialTheme.colorScheme.secondary
                             Card(
                                 modifier = Modifier
                                     .border(
                                         width = if (hovered) 2.dp else 0.dp,
                                         color = when {
-                                            hovered && hoverInvalid -> MaterialTheme.colorScheme.error
-                                            hovered -> MaterialTheme.colorScheme.primary
+                                            inMergeBand && hoverInvalid -> MaterialTheme.colorScheme.error
+                                            inMergeBand -> MaterialTheme.colorScheme.primary
+                                            hovered -> MaterialTheme.colorScheme.secondary
                                             else -> Color.Transparent
                                         },
                                         shape = CardDefaults.shape
                                     )
+                                    // 换行落点：在卡片上/下边缘画一条提示线
+                                    .drawWithContent {
+                                        drawContent()
+                                        if (hovered && !inMergeBand) {
+                                            val h = INSERT_LINE_HEIGHT_DP.dp.toPx()
+                                            drawRoundRect(
+                                                color = insertLineColor,
+                                                topLeft = Offset(0f, if (insertBefore) 0f else size.height - h),
+                                                size = Size(size.width, h),
+                                                cornerRadius = CornerRadius(h / 2f)
+                                            )
+                                        }
+                                    }
                                     .zIndex(if (isDragging) 1f else 0f)
                                     .graphicsLayer {
                                         translationX = if (isDragging) dragOffset.x else 0f
@@ -278,18 +324,17 @@ fun FieldTemplatesScreen(
                                     .onGloballyPositioned { rowBounds[key] = it.boundsInRoot() }
                                     .pointerInput(key) {
                                         detectDragGesturesAfterLongPress(
-                                            onDragStart = { start ->
+                                            onDragStart = {
                                                 draggingKey = key
                                                 dragOffset = Offset.Zero
-                                                // 以手指位置而不是卡片中心判定落点，避免卡片中心先探进行高亮乱跳
-                                                grabInRoot = (rowBounds[key]?.topLeft ?: Offset.Zero) + start
-                                                dropPoint = grabInRoot
+                                                // 以拖动框自身的中心线判定落点
+                                                dropPoint = rowBounds[key]?.center ?: Offset.Zero
                                                 hoverKey = null
                                             },
                                             onDrag = { change, amount ->
                                                 change.consume()
                                                 dragOffset += amount
-                                                dropPoint = grabInRoot + dragOffset
+                                                dropPoint = (rowBounds[key]?.center ?: Offset.Zero) + dragOffset
                                                 hoverKey = hitTestRow(key, dropPoint)
                                             },
                                             onDragEnd = {
