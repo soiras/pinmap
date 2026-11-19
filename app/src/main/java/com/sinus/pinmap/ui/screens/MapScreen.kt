@@ -64,7 +64,6 @@ import com.sinus.pinmap.ui.viewmodel.MapViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicLong
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -123,10 +122,6 @@ fun MapScreen(
             result
         }
     }
-
-    // pinId -> 标记的绘制层级。显式指定才能判断重叠标记里谁画在最上面
-    var markerZIndex by remember { mutableStateOf<Map<Long, Float>>(emptyMap()) }
-    val markerZCounter = remember { AtomicLong(0L) }
 
     // pinId -> 非媒体字段值文本（搜索匹配用）
     var fieldTextByPin by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -384,19 +379,7 @@ fun MapScreen(
             // 设置标记点击事件
             aMap.setOnMarkerClickListener { marker ->
                 marker.hideInfoWindow()
-                val clickedId = marker.snippet?.toLongOrNull() ?: return@setOnMarkerClickListener false
-                // 高德在多个标记重叠时，把点击派发给叠在最下面的那个。标记图标是固定像素尺寸、
-                // 不随缩放变小，地图一缩小，屏幕上就会有一团互相压住的标记，点到的往往不是眼睛看到的最上面那个。
-                // 这里在屏幕坐标里找出与它重叠的标记，按绘制层级取最上面的一枚，保证"看到的是谁，点开的就是谁"。
-                val density = context.resources.displayMetrics.density
-                val pinId = topMostOverlappingPinId(
-                    aMap = aMap,
-                    anchor = marker.position,
-                    pins = filteredPins,
-                    zIndexByPin = markerZIndex,
-                    widthPx = MARKER_SIZE_PX * density,
-                    heightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
-                ) ?: clickedId
+                val pinId = marker.snippet?.toLongOrNull() ?: return@setOnMarkerClickListener false
                 val pin = pins.find { it.id == pinId }
                 if (pin?.avatarPath != null) {
                     viewerPin = pin
@@ -846,12 +829,10 @@ fun MapScreen(
             val currentIds = filteredPins.map { it.id }.toSet()
             val oldIds = markerMap.keys
 
-            val newZIndex = markerZIndex.toMutableMap()
             // 移除已删除的标记
             oldIds.subtract(currentIds).forEach { id ->
                 markerMap[id]?.remove()
             }
-            // 每个 pin 只建一个标记，之后原地改位置和图标，不删了重建——绘制顺序才不会因为重建而跳动
             fun buildMarkerIcon(pin: Pin): com.amap.api.maps.model.BitmapDescriptor {
                 val color = categories.find { it.id == pin.categoryId }?.color ?: DEFAULT_PIN_COLOR
                 val label = pin.title.take(1)
@@ -963,15 +944,10 @@ fun MapScreen(
                     prevPin.latitude != pin.latitude ||
                     prevPin.longitude != pin.longitude
                 val highlightChanged = pin.id == highlightedPinId || pin.id == previousHighlightedPinId
-                if (oldMarker != null) {
-                    if (pinChanged || highlightChanged) {
-                        oldMarker.setIcon(buildMarkerIcon(pin))
-                        oldMarker.position = LatLng(pin.latitude, pin.longitude)
-                    }
+                if (oldMarker != null && !pinChanged && !highlightChanged) {
                     newMap[pin.id] = oldMarker
                 } else {
-                    // 层级只在标记首次出现时分配，之后（过滤、重建、重新出现）都沿用
-                    val zIndex = markerZIndex[pin.id] ?: markerZCounter.incrementAndGet().toFloat()
+                    oldMarker?.remove()
                     val marker = aMap.addMarker(
                         MarkerOptions()
                             .position(LatLng(pin.latitude, pin.longitude))
@@ -979,16 +955,11 @@ fun MapScreen(
                             .snippet(pin.id.toString())
                             .draggable(true)
                             .anchor(0.5f, 1.0f)
-                            .zIndex(zIndex)
                     )
-                    marker?.let {
-                        newMap[pin.id] = it
-                        newZIndex[pin.id] = zIndex
-                    }
+                    marker?.let { newMap[pin.id] = it }
                 }
             }
             markerMap = newMap
-            markerZIndex = newZIndex
             renderedPins = filteredPins.associateBy { it.id }
             previousHighlightedPinId = highlightedPinId
         }
@@ -1060,41 +1031,6 @@ private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
 private val SEARCH_ITEM_V_PADDING = 6.dp
-
-/**
- * 找出与 [anchor] 处图标在屏幕上重叠、且绘制层级最高的标记 id。
- *
- * 高德把重叠标记的点击交给叠在最下面的那枚，标记图标又是固定像素尺寸（不随缩放变小），
- * 地图缩小后容易叠成一团，所以点开前按 zIndex 纠正一次。
- */
-private fun topMostOverlappingPinId(
-    aMap: com.amap.api.maps.AMap,
-    anchor: LatLng,
-    pins: List<Pin>,
-    zIndexByPin: Map<Long, Float>,
-    widthPx: Float,
-    heightPx: Float
-): Long? = try {
-    val base = aMap.projection.toScreenLocation(anchor)
-    var bestId: Long? = null
-    var bestZ = Float.NEGATIVE_INFINITY
-    pins.forEach { pin ->
-        val p = aMap.projection.toScreenLocation(LatLng(pin.latitude, pin.longitude))
-        // 图标以 (x, y) 为底边中点，向上 heightPx、左右各 widthPx / 2 展开；两个矩形相交即视为重叠
-        val overlaps = kotlin.math.abs(p.x - base.x) <= widthPx &&
-            kotlin.math.abs(p.y - base.y) <= heightPx
-        if (overlaps) {
-            val z = zIndexByPin[pin.id] ?: 0f
-            if (z > bestZ) {
-                bestZ = z
-                bestId = pin.id
-            }
-        }
-    }
-    bestId
-} catch (_: Exception) {
-    null
-}
 
 @Composable
 private fun SearchResultItem(
