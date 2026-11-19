@@ -2,6 +2,7 @@ package com.sinus.pinmap.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -67,6 +69,7 @@ fun FieldTemplatesScreen(
     var draggingKey by remember { mutableStateOf<Long?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var dropPoint by remember { mutableStateOf(Offset.Zero) }
+    var hoverKey by remember { mutableStateOf<Long?>(null) }
     val rowBounds = remember { mutableStateMapOf<Long, Rect>() }
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableStateOf(0f) }
@@ -123,6 +126,10 @@ fun FieldTemplatesScreen(
         }
     }
 
+    /** 命中最上层的目标行（排除被拖动的那一行） */
+    fun hitTestRow(excludeKey: Long, point: Offset): Long? =
+        rowBounds.entries.firstOrNull { it.key != excludeKey && it.value.contains(point) }?.key
+
     fun finishDrag() {
         val key = draggingKey
         draggingKey = null
@@ -132,9 +139,7 @@ fun FieldTemplatesScreen(
         val fromIndex = current.indexOfFirst { rowGroupKey(it.first()) == key }
         if (fromIndex < 0) return
         val dragged = current[fromIndex]
-        val targetKey = rowBounds.entries
-            .firstOrNull { it.key != key && it.value.contains(dropPoint) }
-            ?.key
+        val targetKey = hitTestRow(key, dropPoint)
         val targetIndex = if (targetKey == null) -1 else current.indexOfFirst { rowGroupKey(it.first()) == targetKey }
 
         if (targetIndex < 0) {
@@ -164,7 +169,10 @@ fun FieldTemplatesScreen(
                 val newRows = current.toMutableList()
                 newRows[targetIndex] = target + dragged
                 newRows.removeAt(fromIndex)
-                scope.launch { persistRows(newRows) }
+                scope.launch {
+                    persistRows(newRows)
+                    toast("已并成一行")
+                }
             }
         }
     }
@@ -228,9 +236,13 @@ fun FieldTemplatesScreen(
                     }
                 } else {
                     Text(
-                        text = "长按拖动可排序；把一个字段拖到另一个字段上可并成一行（最多 $MAX_FIELDS_PER_ROW 个）",
+                        text = if (draggingKey != null) {
+                            "松手到高亮的卡片上即可合并，最多 $MAX_FIELDS_PER_ROW 个"
+                        } else {
+                            "长按拖动可排序；把一个字段拖到另一个字段上可并成一行（最多 $MAX_FIELDS_PER_ROW 个）"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (draggingKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(
@@ -240,8 +252,22 @@ fun FieldTemplatesScreen(
                         itemsIndexed(rows, key = { _, row -> rowGroupKey(row.first()) }) { _, row ->
                             val key = rowGroupKey(row.first())
                             val isDragging = draggingKey == key
+                            val hovered = hoverKey == key
+                            val draggedRow = rows.firstOrNull { rowGroupKey(it.first()) == draggingKey }
+                            // 整行拖动时任何落点都合法；单字段拖进满行或含媒体字段的行才提示不可合并
+                            val hoverInvalid = hovered && draggedRow != null && draggedRow.size == 1 &&
+                                (row.hasFullRowField() || draggedRow.hasFullRowField() || row.size >= MAX_FIELDS_PER_ROW)
                             Card(
                                 modifier = Modifier
+                                    .border(
+                                        width = if (hovered) 2.dp else 0.dp,
+                                        color = when {
+                                            hovered && hoverInvalid -> MaterialTheme.colorScheme.error
+                                            hovered -> MaterialTheme.colorScheme.primary
+                                            else -> Color.Transparent
+                                        },
+                                        shape = CardDefaults.shape
+                                    )
                                     .zIndex(if (isDragging) 1f else 0f)
                                     .graphicsLayer {
                                         translationX = if (isDragging) dragOffset.x else 0f
@@ -254,16 +280,22 @@ fun FieldTemplatesScreen(
                                                 draggingKey = key
                                                 dragOffset = Offset.Zero
                                                 dropPoint = rowBounds[key]?.center ?: Offset.Zero
+                                                hoverKey = null
                                             },
                                             onDrag = { change, amount ->
                                                 change.consume()
                                                 dragOffset += amount
                                                 dropPoint = (rowBounds[key]?.center ?: Offset.Zero) + dragOffset
+                                                hoverKey = hitTestRow(key, dropPoint)
                                             },
-                                            onDragEnd = { finishDrag() },
+                                            onDragEnd = {
+                                                hoverKey = null
+                                                finishDrag()
+                                            },
                                             onDragCancel = {
                                                 draggingKey = null
                                                 dragOffset = Offset.Zero
+                                                hoverKey = null
                                             }
                                         )
                                     }
