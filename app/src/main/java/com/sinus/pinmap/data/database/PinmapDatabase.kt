@@ -45,16 +45,40 @@ abstract class PinmapDatabase : RoomDatabase() {
         @Volatile
         private var mInstance: PinmapDatabase? = null
 
+        /**
+         * 逐列加列：开发期出现过"列已经加上、版本号还停在前一版"的数据库，
+         * 再次升级时裸 ALTER 会报 duplicate column name 直接崩溃。
+         * 这里先查 PRAGMA table_info，已存在就跳过，让这些迁移可以重复执行。
+         */
+        private fun SupportSQLiteDatabase.hasColumn(table: String, column: String): Boolean =
+            query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                var found = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == column) {
+                        found = true
+                        break
+                    }
+                }
+                found
+            }
+
+        private fun SupportSQLiteDatabase.addColumnIfMissing(table: String, column: String, definition: String) {
+            if (!hasColumn(table, column)) {
+                execSQL("ALTER TABLE `$table` ADD COLUMN `$column` $definition")
+            }
+        }
+
         val mMigration_3_4 = Migration(3, 4) { db ->
-            db.execSQL("ALTER TABLE field_templates ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0")
+            db.addColumnIfMissing("field_templates", "sortOrder", "INTEGER NOT NULL DEFAULT 0")
         }
 
         val mMigration_4_5 = Migration(4, 5) { db ->
-            db.execSQL("ALTER TABLE pins ADD COLUMN avatarPath TEXT")
+            db.addColumnIfMissing("pins", "avatarPath", "TEXT")
         }
 
         val mMigration_5_6 = Migration(5, 6) { db ->
-            db.execSQL("ALTER TABLE pins ADD COLUMN address TEXT")
+            db.addColumnIfMissing("pins", "address", "TEXT")
         }
 
         val mMigration_6_7 = Migration(6, 7) { db ->
@@ -78,16 +102,16 @@ abstract class PinmapDatabase : RoomDatabase() {
         }
 
         val mMigration_7_8 = Migration(7, 8) { db ->
-            db.execSQL("ALTER TABLE pins ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
+            db.addColumnIfMissing("pins", "isFavorite", "INTEGER NOT NULL DEFAULT 0")
         }
 
         val mMigration_8_9 = Migration(8, 9) { db ->
-            db.execSQL("ALTER TABLE pins ADD COLUMN avatarScale REAL NOT NULL DEFAULT 1.0")
-            db.execSQL("ALTER TABLE pins ADD COLUMN avatarOffsetX REAL NOT NULL DEFAULT 0.0")
-            db.execSQL("ALTER TABLE pins ADD COLUMN avatarOffsetY REAL NOT NULL DEFAULT 0.0")
-            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaScale REAL NOT NULL DEFAULT 1.0")
-            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaOffsetX REAL NOT NULL DEFAULT 0.0")
-            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaOffsetY REAL NOT NULL DEFAULT 0.0")
+            db.addColumnIfMissing("pins", "avatarScale", "REAL NOT NULL DEFAULT 1.0")
+            db.addColumnIfMissing("pins", "avatarOffsetX", "REAL NOT NULL DEFAULT 0.0")
+            db.addColumnIfMissing("pins", "avatarOffsetY", "REAL NOT NULL DEFAULT 0.0")
+            db.addColumnIfMissing("field_values", "mediaScale", "REAL NOT NULL DEFAULT 1.0")
+            db.addColumnIfMissing("field_values", "mediaOffsetX", "REAL NOT NULL DEFAULT 0.0")
+            db.addColumnIfMissing("field_values", "mediaOffsetY", "REAL NOT NULL DEFAULT 0.0")
         }
 
         fun getDatabase(context: Context): PinmapDatabase {
