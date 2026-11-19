@@ -1020,7 +1020,7 @@ private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
-private val SEARCH_ITEM_V_PADDING = 8.dp
+private val SEARCH_ITEM_V_PADDING = 6.dp
 
 /**
  * 判断 [point] 是否落在以 [markerPosition] 为锚点（anchor 0.5, 1.0）的标记图标范围内。
