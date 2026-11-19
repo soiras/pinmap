@@ -197,7 +197,9 @@ object PinExporter {
                 JSONObject().apply {
                     put("name", cat.name)
                     put("color", cat.color)
-                    cat.icon?.let { put("icon", it) }
+                    cat.icon?.let { raw ->
+                        resolveFilePath(raw)?.let { put("icon", addFile(it)) }
+                    }
                     put("createdAt", cat.createdAt)
                     put("updatedAt", cat.updatedAt)
                     val ftArray = JSONArray()

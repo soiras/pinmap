@@ -1,5 +1,7 @@
 package com.sinus.pinmap.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +30,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sinus.pinmap.data.database.PinmapDatabase
 import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.repository.CategoryRepository
+import com.sinus.pinmap.ui.components.CategoryBadge
 import com.sinus.pinmap.ui.theme.CategoryPresetColors
+import com.sinus.pinmap.ui.utils.CategoryIconStore
 import com.sinus.pinmap.ui.viewmodel.CategoryViewModel
 import kotlin.math.roundToInt
 
@@ -88,7 +92,11 @@ fun CategoryListScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Box(modifier = Modifier.size(48.dp).background(Color(category.color), CircleShape))
+                                CategoryBadge(
+                                    color = category.color,
+                                    iconPath = category.icon,
+                                    size = 48.dp
+                                )
                                 Column {
                                     Text(text = category.name, style = MaterialTheme.typography.titleMedium)
                                     Text(text = "点击管理字段模板", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -132,8 +140,8 @@ fun CategoryListScreen(
 
     if (showCreateDialog) {
         CreateCategoryDialog(
-            onConfirm = { name, color ->
-                viewModel.createCategory(name, color)
+            onConfirm = { name, color, icon ->
+                viewModel.createCategory(name, color, icon)
                 showCreateDialog = false
             },
             onDismiss = { showCreateDialog = false }
@@ -143,6 +151,16 @@ fun CategoryListScreen(
     categoryToEdit?.let { category ->
         var editName by remember { mutableStateOf(category.name) }
         var editColor by remember { mutableStateOf(CategoryPresetColors.find { it.hashCode() == category.color } ?: CategoryPresetColors[0]) }
+        var editIcon by remember { mutableStateOf(category.icon) }
+        val editIconPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                val saved = CategoryIconStore.save(context, uri)
+                if (saved != null) {
+                    CategoryIconStore.delete(context, editIcon)
+                    editIcon = saved
+                }
+            }
+        }
 
         Dialog(onDismissRequest = { categoryToEdit = null }) {
             Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -175,13 +193,33 @@ fun CategoryListScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CategoryBadge(color = editColor.hashCode(), iconPath = editIcon, size = 48.dp)
+                        TextButton(onClick = { editIconPicker.launch("image/*") }) {
+                            Text(if (editIcon == null) "选择图片" else "更换图片")
+                        }
+                        if (editIcon != null) {
+                            TextButton(
+                                onClick = {
+                                    CategoryIconStore.delete(context, editIcon)
+                                    editIcon = null
+                                }
+                            ) { Text("清除") }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { categoryToEdit = null }) { Text("取消") }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                viewModel.updateCategory(category.copy(name = editName, color = editColor.hashCode()))
+                                if (editIcon != category.icon) CategoryIconStore.delete(context, category.icon)
+                                viewModel.updateCategory(category.copy(name = editName, color = editColor.hashCode(), icon = editIcon))
                                 categoryToEdit = null
                             },
                             enabled = editName.isNotBlank()

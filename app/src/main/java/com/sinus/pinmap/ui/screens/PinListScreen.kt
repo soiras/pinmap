@@ -33,6 +33,7 @@ import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.color
+import com.sinus.pinmap.ui.components.CategoryBadge
 import com.sinus.pinmap.ui.components.MediaImageView
 import com.sinus.pinmap.ui.icon
 import com.sinus.pinmap.ui.label
@@ -133,10 +134,10 @@ fun PinListScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(12.dp)
-                                                            .background(Color(category.color), CircleShape)
+                                                    CategoryBadge(
+                                                        color = category.color,
+                                                        iconPath = category.icon,
+                                                        size = 12.dp
                                                     )
                                                     Text(category.name)
                                                 }
@@ -331,10 +332,10 @@ private fun PinItem(
                         offsetY = pin.avatarOffsetY
                     )
                 } else if (category != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(PIN_AVATAR_SIZE)
-                            .background(Color(category.color), CircleShape)
+                    CategoryBadge(
+                        color = category.color,
+                        iconPath = category.icon,
+                        size = PIN_AVATAR_SIZE
                     )
                 } else {
                     Box(

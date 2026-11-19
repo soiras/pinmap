@@ -1,5 +1,7 @@
 package com.sinus.pinmap.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,21 +14,36 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
+import com.sinus.pinmap.ui.components.CategoryBadge
 import com.sinus.pinmap.ui.theme.CategoryPresetColors
+import com.sinus.pinmap.ui.utils.CategoryIconStore
 
 /**
  * 创建分类对话框
  */
 @Composable
 fun CreateCategoryDialog(
-    onConfirm: (name: String, color: Int) -> Unit,
+    onConfirm: (name: String, color: Int, icon: String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(CategoryPresetColors[0]) }
+    var iconPath by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    val iconPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val saved = CategoryIconStore.save(context, uri)
+            if (saved != null) {
+                CategoryIconStore.delete(context, iconPath)
+                iconPath = saved
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -86,6 +103,34 @@ fun CreateCategoryDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 图标：纯色圆点或自定义图片
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CategoryBadge(
+                        color = selectedColor.hashCode(),
+                        iconPath = iconPath,
+                        size = 48.dp
+                    )
+                    TextButton(onClick = { iconPicker.launch("image/*") }) {
+                        Text(if (iconPath == null) "选择图片" else "更换图片")
+                    }
+                    if (iconPath != null) {
+                        TextButton(
+                            onClick = {
+                                CategoryIconStore.delete(context, iconPath)
+                                iconPath = null
+                            }
+                        ) {
+                            Text("清除")
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 按钮
@@ -100,7 +145,7 @@ fun CreateCategoryDialog(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
-                        onClick = { onConfirm(name, selectedColor.hashCode()) },
+                        onClick = { onConfirm(name, selectedColor.hashCode(), iconPath) },
                         enabled = name.isNotBlank()
                     ) {
                         Text("创建")

@@ -140,17 +140,21 @@ object PinImporter {
                 }
             }
         }
-        Log.d(TAG, "media entries to extract: ${mediaEntries.size} (avatar: ${avatarEntries.size})")
+        // 分类图标也放在 files/ 下，需要一起解压并回写路径
+        val iconEntries = file.categories.mapNotNull { it.icon }.filter { it.startsWith("files/") }.toSet()
+        mediaEntries.addAll(iconEntries)
+        Log.d(TAG, "media entries to extract: ${mediaEntries.size} (avatar: ${avatarEntries.size}, icon: ${iconEntries.size})")
 
         // 第二步：解压媒体文件，得到 oldEntry -> newPath 映射
         val mediaDir = File(context.filesDir, "images").apply { mkdirs() }
         val avatarDir = File(context.filesDir, "avatars").apply { mkdirs() }
+        val iconDir = File(context.filesDir, "category_icons").apply { mkdirs() }
 
         val totalWork = file.categories.size + allPins.size + mediaEntries.size + 1
         var done = 0
 
         val mediaPathMap = extractMedia(
-            context, uri, mediaEntries, avatarEntries, mediaDir, avatarDir,
+            context, uri, mediaEntries, avatarEntries, iconEntries, mediaDir, avatarDir, iconDir,
             onProgress = {
                 done++
                 onProgress(done, totalWork)
@@ -248,7 +252,7 @@ object PinImporter {
                         Category(
                             name = catData.name,
                             color = catData.color,
-                            icon = catData.icon,
+                            icon = catData.icon?.let { mediaPathMap[it] },
                             createdAt = catData.createdAt,
                             updatedAt = catData.updatedAt
                         )
@@ -257,7 +261,7 @@ object PinImporter {
                         id = newId,
                         name = catData.name,
                         color = catData.color,
-                        icon = catData.icon,
+                        icon = catData.icon?.let { mediaPathMap[it] },
                         createdAt = catData.createdAt,
                         updatedAt = catData.updatedAt
                     )
@@ -473,8 +477,10 @@ object PinImporter {
         uri: Uri,
         entries: Set<String>,
         avatarEntries: Set<String>,
+        iconEntries: Set<String>,
         mediaDir: File,
         avatarDir: File,
+        iconDir: File,
         onProgress: () -> Unit = {}
     ): Map<String, String> {
         if (entries.isEmpty()) return emptyMap()
@@ -488,12 +494,18 @@ object PinImporter {
                 while (entry != null) {
                     val entryName = entry.name
                     if (entryName in entries) {
-                        val targetDir = if (entryName in avatarEntries) avatarDir else mediaDir
+                        val isIcon = entryName in iconEntries
+                        val targetDir = when {
+                            entryName in avatarEntries -> avatarDir
+                            isIcon -> iconDir
+                            else -> mediaDir
+                        }
+                        val prefix = if (isIcon) "ICON_" else "IMG_"
                         val originalName = entryName.substringAfterLast('/')
                         val ext = originalName.substringAfterLast('.', "jpg").takeIf { it.length in 1..5 } ?: "jpg"
-                        var fileName = "IMG_${System.currentTimeMillis()}_${usedNames.size}.$ext"
+                        var fileName = "${prefix}${System.currentTimeMillis()}_${usedNames.size}.$ext"
                         while (fileName in usedNames) {
-                            fileName = "IMG_${System.currentTimeMillis()}_${usedNames.size}.$ext"
+                            fileName = "${prefix}${System.currentTimeMillis()}_${usedNames.size}.$ext"
                         }
                         usedNames.add(fileName)
                         val dest = File(targetDir, fileName)

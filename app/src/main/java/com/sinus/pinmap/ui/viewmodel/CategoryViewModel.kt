@@ -40,11 +40,12 @@ class CategoryViewModel(
         }
     }
 
-    fun createCategory(name: String, color: Int) {
+    fun createCategory(name: String, color: Int, icon: String? = null) {
         viewModelScope.launch {
             val category = Category(
                 name = name,
-                color = color
+                color = color,
+                icon = icon
             )
             mCategoryRepository.insertCategory(category)
         }
@@ -55,6 +56,7 @@ class CategoryViewModel(
             val refs = mDatabase.withTransaction {
                 val pins = mPinRepository.getPinsByCategory(category.id).first()
                 val allRefs = mutableListOf<String>()
+                category.icon?.let { allRefs.add(it) }
                 pins.forEach { pin ->
                     pin.avatarPath?.let { allRefs.add(it) }
                     mValueRepository.getFieldValuesByPin(pin.id).first().forEach { fv ->

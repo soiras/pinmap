@@ -55,6 +55,7 @@ import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.components.CategoryBadge
 import com.sinus.pinmap.ui.color
 import com.sinus.pinmap.ui.icon
 import com.sinus.pinmap.ui.label
@@ -755,10 +756,10 @@ fun MapScreen(
                         text = { Text(category.name) },
                         onClick = { selectedCategoryId = category.id; showCategoryFilter = false },
                         leadingIcon = {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .background(Color(category.color), CircleShape)
+                            CategoryBadge(
+                                color = category.color,
+                                iconPath = category.icon,
+                                size = 12.dp
                             )
                         },
                         trailingIcon = if (selectedCategoryId == category.id) {
