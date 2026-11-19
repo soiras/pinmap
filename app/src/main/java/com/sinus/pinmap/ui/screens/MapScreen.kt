@@ -875,8 +875,8 @@ fun MapScreen(
 
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
                 paint.color = color
-                // 三态用描边表达：必吃琥珀、关注蓝、无标记保持白色描边
-                val markBorderColor = when (pin.markKind) {
+                // 三态颜色：必吃琥珀、关注蓝、无标记用分类色
+                val markColor = when (pin.markKind) {
                     MarkKind.MUST_EAT -> MARKER_MUST_EAT_COLOR
                     MarkKind.WATCHED -> MARKER_WATCHED_COLOR
                     MarkKind.NONE -> null
@@ -898,22 +898,16 @@ fun MapScreen(
                     canvas.drawBitmap(avatarBitmap, srcRect, dstRect, null)
                     canvas.restore()
                     paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = if (markBorderColor != null) MARKER_STATE_BORDER_WIDTH_DP * density else STROKE_WIDTH_AVATAR
-                    paint.color = markBorderColor ?: COLOR_WHITE_INT
+                    paint.strokeWidth = if (markColor != null) MARKER_STATE_BORDER_WIDTH_DP * density else STROKE_WIDTH_AVATAR
+                    paint.color = markColor ?: COLOR_WHITE_INT
                     canvas.drawCircle(cx, cy, r, paint)
                     paint.style = Paint.Style.FILL
                 } else {
                     val bodyB = totalH - arrowH - PADDING_4F
                     val rect = android.graphics.RectF(PADDING_4F, PADDING_4F, size - PADDING_4F, bodyB)
+                    // 有标记时整块气泡用三态色填充，未标记时用分类色
+                    paint.color = markColor ?: color
                     canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
-                    if (markBorderColor != null) {
-                        paint.style = Paint.Style.STROKE
-                        paint.strokeWidth = MARKER_STATE_BORDER_WIDTH_DP * density
-                        paint.color = markBorderColor
-                        canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
-                        paint.style = Paint.Style.FILL
-                        paint.color = color
-                    }
                     val cx = size / 2f
                     val cy = bodyB / 2f
                     val r = bodyB / 2f - 8f
@@ -927,7 +921,7 @@ fun MapScreen(
                 }
 
                 // Arrow：有标记时用三态色，避免被相邻图标盖住后看不出状态
-                paint.color = markBorderColor ?: color
+                paint.color = markColor ?: color
                 val cx = size / 2f
                 val arrowPath = android.graphics.Path().apply {
                     val arrowTop = if (avatarBitmap != null) size - PADDING_4F else totalH - arrowH - PADDING_4F
