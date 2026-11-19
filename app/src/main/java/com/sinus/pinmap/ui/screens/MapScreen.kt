@@ -55,6 +55,7 @@ import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.color
 import com.sinus.pinmap.ui.icon
 import com.sinus.pinmap.ui.label
 import com.sinus.pinmap.ui.utils.LocationManager
@@ -758,7 +759,7 @@ fun MapScreen(
                             Icon(
                                 kind.icon,
                                 contentDescription = null,
-                                tint = if (kind == MarkKind.MUST_EAT) Color(0xFFF57C00) else Color(0xFF1E88E5)
+                                tint = kind.color
                             )
                         },
                         trailingIcon = if (markFilter == kind) {
@@ -1054,7 +1055,7 @@ fun MapScreen(
 private val DEFAULT_PIN_COLOR = 0xFF666666.toInt()
 private val COLOR_WHITE_INT = 0xFFFFFFFF.toInt()
 private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
-private val MARKER_MUST_EAT_COLOR = 0xFFF57C00.toInt()
+private val MARKER_MUST_EAT_COLOR = 0xFFFFC107.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_BADGE_RADIUS_RATIO = 0.22f
 private val MARKER_BADGE_STROKE = 2f
