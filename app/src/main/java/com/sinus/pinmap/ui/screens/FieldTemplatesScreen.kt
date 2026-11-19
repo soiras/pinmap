@@ -383,7 +383,9 @@ fun FieldTemplatesScreen(
                                         }
                                     }
                                 } else {
-                                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp)
+                                    ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically
@@ -395,7 +397,12 @@ fun FieldTemplatesScreen(
                                                         color = MaterialTheme.colorScheme.outlineVariant
                                                     )
                                                 }
-                                                Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                                                Column(
+                                                    modifier = Modifier.weight(1f).padding(
+                                                        start = if (index == 0) 0.dp else 8.dp,
+                                                        end = 4.dp
+                                                    )
+                                                ) {
                                                     Text(
                                                         text = template.fieldName,
                                                         style = MaterialTheme.typography.bodyMedium,
