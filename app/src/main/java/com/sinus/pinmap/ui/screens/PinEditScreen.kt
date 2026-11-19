@@ -83,6 +83,8 @@ import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.components.MediaAdjuster
+import com.sinus.pinmap.ui.components.MediaImageView
 import com.sinus.pinmap.ui.utils.PinExporter
 import com.amap.api.services.core.PoiItemV2
 import com.amap.api.services.core.LatLonPoint
@@ -157,6 +159,13 @@ fun PinEditScreen(
     var editingAvatar by remember { mutableStateOf<String?>(null) }
     var avatarDeleted by remember { mutableStateOf(false) }
     var viewingAvatar by remember { mutableStateOf(false) }
+    var adjustingAvatar by remember { mutableStateOf(false) }
+    var avatarScale by remember { mutableFloatStateOf(1f) }
+    var avatarOffsetX by remember { mutableFloatStateOf(0f) }
+    var avatarOffsetY by remember { mutableFloatStateOf(0f) }
+    var editingAvatarScale by remember { mutableFloatStateOf(1f) }
+    var editingAvatarOffsetX by remember { mutableFloatStateOf(0f) }
+    var editingAvatarOffsetY by remember { mutableFloatStateOf(0f) }
     var isFavorite by remember { mutableStateOf(false) }
     var address by remember { mutableStateOf("") }
     var pinLat by remember { mutableDoubleStateOf(lat) }
@@ -181,6 +190,12 @@ fun PinEditScreen(
                 avatarPath = pin.avatarPath
                 address = pin.address ?: ""
                 isFavorite = pin.isFavorite
+                avatarScale = pin.avatarScale
+                avatarOffsetX = pin.avatarOffsetX
+                avatarOffsetY = pin.avatarOffsetY
+                editingAvatarScale = pin.avatarScale
+                editingAvatarOffsetX = pin.avatarOffsetX
+                editingAvatarOffsetY = pin.avatarOffsetY
                 pinLat = pin.latitude
                 pinLng = pin.longitude
                 selectedCategory?.let { cat ->
@@ -404,7 +419,14 @@ fun PinEditScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (avatarUri != null) {
-                                    Image(painter = coil.compose.rememberAsyncImagePainter(avatarUri), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                    MediaImageView(
+                                        uri = avatarUri,
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = CircleShape,
+                                        scale = editingAvatarScale,
+                                        offsetX = editingAvatarOffsetX,
+                                        offsetY = editingAvatarOffsetY
+                                    )
                                 } else {
                                     Icon(Icons.Default.Person, contentDescription = "设置头像", modifier = Modifier.size(ICON_SIZE_32), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -417,7 +439,11 @@ fun PinEditScreen(
                                         .clip(CircleShape)
                                         .background(MaterialTheme.colorScheme.primary)
                                         .clickable {
-                                            pendingImageTemplateId = -1L; imagePickerLauncher.launch("image/*")
+                                            // 进入显示区域调整
+                                            avatarScale = editingAvatarScale
+                                            avatarOffsetX = editingAvatarOffsetX
+                                            avatarOffsetY = editingAvatarOffsetY
+                                            adjustingAvatar = true
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -728,13 +754,13 @@ fun PinEditScreen(
                             }
                             val id = when {
                                 pinId == 0L -> {
-                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite))
+                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
                                     pinId = newId
                                     newId
                                 }
                                 else -> {
                                     pinRepository.getPinById(pinId)?.let { pin ->
-                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite))
+                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
                                     }
                                     pinId
                                 }
@@ -1044,6 +1070,29 @@ fun PinEditScreen(
                 }
             }
         }
+    }
+
+    // 头像显示区域调整
+    val adjustingAvatarUri = if (avatarDeleted) null else (editingAvatar ?: avatarPath)
+    if (adjustingAvatar && adjustingAvatarUri != null) {
+        MediaAdjuster(
+            uri = adjustingAvatarUri,
+            initialScale = avatarScale,
+            initialOffsetX = avatarOffsetX,
+            initialOffsetY = avatarOffsetY,
+            onDismiss = { adjustingAvatar = false },
+            onConfirm = { scale, offsetX, offsetY ->
+                editingAvatarScale = scale
+                editingAvatarOffsetX = offsetX
+                editingAvatarOffsetY = offsetY
+                adjustingAvatar = false
+                markDirty()
+            },
+            onPickNew = {
+                adjustingAvatar = false
+                pendingImageTemplateId = -1L; imagePickerLauncher.launch("image/*")
+            }
+        )
     }
 }
 

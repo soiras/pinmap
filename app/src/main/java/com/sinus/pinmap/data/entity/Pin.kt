@@ -18,6 +18,10 @@ data class Pin(
     val avatarPath: String? = null,
     val address: String? = null,
     val isFavorite: Boolean = false,
+    // 头像显示区域参数（相对值：scale 为缩放倍数，offset 为 0~1 相对偏移）
+    val avatarScale: Float = 1f,
+    val avatarOffsetX: Float = 0f,
+    val avatarOffsetY: Float = 0f,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

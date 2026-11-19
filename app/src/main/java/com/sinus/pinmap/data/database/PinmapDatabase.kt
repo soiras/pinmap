@@ -29,7 +29,7 @@ import com.sinus.pinmap.data.entity.Pin
         Attachment::class,
         OfflineMap::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -81,6 +81,15 @@ abstract class PinmapDatabase : RoomDatabase() {
             db.execSQL("ALTER TABLE pins ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
         }
 
+        val mMigration_8_9 = Migration(8, 9) { db ->
+            db.execSQL("ALTER TABLE pins ADD COLUMN avatarScale REAL NOT NULL DEFAULT 1.0")
+            db.execSQL("ALTER TABLE pins ADD COLUMN avatarOffsetX REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE pins ADD COLUMN avatarOffsetY REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaScale REAL NOT NULL DEFAULT 1.0")
+            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaOffsetX REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE field_values ADD COLUMN mediaOffsetY REAL NOT NULL DEFAULT 0.0")
+        }
+
         fun getDatabase(context: Context): PinmapDatabase {
             return mInstance ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -88,7 +97,7 @@ abstract class PinmapDatabase : RoomDatabase() {
                     PinmapDatabase::class.java,
                     "pinmap_database"
                 )
-                    .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7, mMigration_7_8)
+                    .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7, mMigration_7_8, mMigration_8_9)
                     // 老版本（如 v2）无迁移路径时直接重建数据库，避免启动崩溃
                     .fallbackToDestructiveMigration()
                     .build()

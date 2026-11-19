@@ -32,6 +32,7 @@ import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.components.MediaImageView
 import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.utils.MediaFileHelper
 import com.sinus.pinmap.ui.utils.haversineDistance
@@ -335,15 +336,13 @@ private fun PinItem(
                 modifier = Modifier.weight(1f)
             ) {
                 if (pin.avatarPath != null) {
-                    Image(
-                        painter = coil.compose.rememberAsyncImagePainter(
-                            if (pin.avatarPath.startsWith("/")) pin.avatarPath else "file://${pin.avatarPath}"
-                        ),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(PIN_AVATAR_SIZE)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
+                    MediaImageView(
+                        uri = if (pin.avatarPath.startsWith("/")) pin.avatarPath else "file://${pin.avatarPath}",
+                        modifier = Modifier.size(PIN_AVATAR_SIZE),
+                        shape = CircleShape,
+                        scale = pin.avatarScale,
+                        offsetX = pin.avatarOffsetX,
+                        offsetY = pin.avatarOffsetY
                     )
                 } else if (category != null) {
                     Box(
