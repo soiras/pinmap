@@ -874,6 +874,12 @@ fun MapScreen(
 
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
                 paint.color = color
+                // 三态用描边表达：必吃琥珀、关注蓝、无标记保持白色描边
+                val markBorderColor = when (pin.markKind) {
+                    MarkKind.MUST_EAT -> MARKER_MUST_EAT_COLOR
+                    MarkKind.WATCHED -> MARKER_WATCHED_COLOR
+                    MarkKind.NONE -> null
+                }
 
                 if (avatarBitmap != null) {
                     val cx = size / 2f
@@ -892,13 +898,21 @@ fun MapScreen(
                     canvas.restore()
                     paint.style = Paint.Style.STROKE
                     paint.strokeWidth = STROKE_WIDTH_AVATAR
-                    paint.color = COLOR_WHITE_INT
+                    paint.color = markBorderColor ?: COLOR_WHITE_INT
                     canvas.drawCircle(cx, cy, r, paint)
                     paint.style = Paint.Style.FILL
                 } else {
                     val bodyB = totalH - arrowH - PADDING_4F
                     val rect = android.graphics.RectF(PADDING_4F, PADDING_4F, size - PADDING_4F, bodyB)
                     canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
+                    if (markBorderColor != null) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = STROKE_WIDTH_AVATAR
+                        paint.color = markBorderColor
+                        canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
+                        paint.style = Paint.Style.FILL
+                        paint.color = color
+                    }
                     val cx = size / 2f
                     val cy = bodyB / 2f
                     val r = bodyB / 2f - 8f
@@ -936,21 +950,6 @@ fun MapScreen(
                         val rect = android.graphics.RectF(PADDING_2F, PADDING_2F, size - PADDING_2F, bodyB + PADDING_2F)
                         canvas.drawRoundRect(rect, CORNER_RADIUS_HIGHLIGHT, CORNER_RADIUS_HIGHLIGHT, paint)
                     }
-                    paint.style = Paint.Style.FILL
-                }
-
-                // 三态标记的小角标（必吃橙、关注蓝）
-                if (pin.markKind != MarkKind.NONE) {
-                    val badgeR = size * MARKER_BADGE_RADIUS_RATIO
-                    val badgeCx = size - badgeR - PADDING_2F
-                    val badgeCy = if (avatarBitmap != null) badgeR + PADDING_2F else badgeR + PADDING_4F
-                    paint.style = Paint.Style.FILL
-                    paint.color = if (pin.markKind == MarkKind.MUST_EAT) MARKER_MUST_EAT_COLOR else MARKER_WATCHED_COLOR
-                    canvas.drawCircle(badgeCx, badgeCy, badgeR, paint)
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = MARKER_BADGE_STROKE
-                    paint.color = COLOR_WHITE_INT
-                    canvas.drawCircle(badgeCx, badgeCy, badgeR, paint)
                     paint.style = Paint.Style.FILL
                 }
 
@@ -1057,8 +1056,6 @@ private val COLOR_WHITE_INT = 0xFFFFFFFF.toInt()
 private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
 private val MARKER_MUST_EAT_COLOR = 0xFFFFC107.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
-private val MARKER_BADGE_RADIUS_RATIO = 0.22f
-private val MARKER_BADGE_STROKE = 2f
 private val NAV_BAR_GAP = 80.dp
 private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
