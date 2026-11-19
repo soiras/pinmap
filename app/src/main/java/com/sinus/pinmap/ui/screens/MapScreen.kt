@@ -390,6 +390,7 @@ fun MapScreen(
                     anchor = marker.position,
                     pins = filteredPins,
                     zIndexByPin = markerZIndex,
+                    highlightedPinId = highlightedPinId,
                     widthPx = MARKER_SIZE_PX * density,
                     heightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
                 ) ?: clickedId
@@ -942,8 +943,14 @@ fun MapScreen(
                 }
 
                 val markerIcon = BitmapDescriptorFactory.fromBitmap(bubble)
-                // 后建后画的层级更高：重建的标记（如刚高亮的）自然压在最上面
-                val zIndex = markerZCounter.incrementAndGet().toFloat()
+                // 层级只在标记首次出现时分配，之后重建一律沿用，叠放次序不会因为重建而跳动；
+                // 只有被搜索高亮的标记临时提到最上面，取消高亮后回到原来的层级。
+                val baseZIndex = markerZIndex[pin.id] ?: markerZCounter.incrementAndGet().toFloat()
+                val zIndex = if (pin.id == highlightedPinId) {
+                    markerZCounter.incrementAndGet().toFloat()
+                } else {
+                    baseZIndex
+                }
                 val markerOptions = MarkerOptions()
                     .position(LatLng(pin.latitude, pin.longitude))
                     .icon(markerIcon)
@@ -954,7 +961,7 @@ fun MapScreen(
 
                 val marker = aMap.addMarker(markerOptions)
                 marker?.let { newMap[pin.id] = it }
-                newZIndex[pin.id] = zIndex
+                newZIndex[pin.id] = baseZIndex
                 }
             }
             markerMap = newMap
@@ -1038,18 +1045,23 @@ private fun topMostOverlappingPinId(
     anchor: LatLng,
     pins: List<Pin>,
     zIndexByPin: Map<Long, Float>,
+    highlightedPinId: Long?,
     widthPx: Float,
     heightPx: Float
 ): Long? = try {
     val base = aMap.projection.toScreenLocation(anchor)
     var bestId: Long? = null
     var bestZ = Float.NEGATIVE_INFINITY
+    var highlightedHit = false
     pins.forEach { pin ->
         val p = aMap.projection.toScreenLocation(LatLng(pin.latitude, pin.longitude))
         // 图标以 (x, y) 为底边中点，向上 heightPx、左右各 widthPx / 2 展开；两个矩形相交即视为重叠
         val overlaps = kotlin.math.abs(p.x - base.x) <= widthPx &&
             kotlin.math.abs(p.y - base.y) <= heightPx
         if (overlaps) {
+            if (pin.id == highlightedPinId) {
+                highlightedHit = true
+            }
             val z = zIndexByPin[pin.id] ?: 0f
             if (z > bestZ) {
                 bestZ = z
@@ -1057,7 +1069,7 @@ private fun topMostOverlappingPinId(
             }
         }
     }
-    bestId
+    if (highlightedHit) highlightedPinId else bestId
 } catch (_: Exception) {
     null
 }
