@@ -70,6 +70,8 @@ fun FieldTemplatesScreen(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var dropPoint by remember { mutableStateOf(Offset.Zero) }
     var hoverKey by remember { mutableStateOf<Long?>(null) }
+    // 长按点相对卡片左上角的偏移，用来把手指位置换算到 root 坐标
+    var grabInRoot by remember { mutableStateOf(Offset.Zero) }
     val rowBounds = remember { mutableStateMapOf<Long, Rect>() }
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableStateOf(0f) }
@@ -276,16 +278,18 @@ fun FieldTemplatesScreen(
                                     .onGloballyPositioned { rowBounds[key] = it.boundsInRoot() }
                                     .pointerInput(key) {
                                         detectDragGesturesAfterLongPress(
-                                            onDragStart = {
+                                            onDragStart = { start ->
                                                 draggingKey = key
                                                 dragOffset = Offset.Zero
-                                                dropPoint = rowBounds[key]?.center ?: Offset.Zero
+                                                // 以手指位置而不是卡片中心判定落点，避免卡片中心先探进行高亮乱跳
+                                                grabInRoot = (rowBounds[key]?.topLeft ?: Offset.Zero) + start
+                                                dropPoint = grabInRoot
                                                 hoverKey = null
                                             },
                                             onDrag = { change, amount ->
                                                 change.consume()
                                                 dragOffset += amount
-                                                dropPoint = (rowBounds[key]?.center ?: Offset.Zero) + dragOffset
+                                                dropPoint = grabInRoot + dragOffset
                                                 hoverKey = hitTestRow(key, dropPoint)
                                             },
                                             onDragEnd = {
