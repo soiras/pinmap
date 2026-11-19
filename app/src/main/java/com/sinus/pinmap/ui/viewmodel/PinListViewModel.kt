@@ -43,10 +43,6 @@ class PinListViewModel(
     private val mSelectedCategoryId = MutableStateFlow<Long?>(null)
     val _selectedCategoryId: StateFlow<Long?> = mSelectedCategoryId.asStateFlow()
 
-    // null 表示不按三态过滤
-    private val mMarkFilter = MutableStateFlow<MarkKind?>(null)
-    val _markFilter: StateFlow<MarkKind?> = mMarkFilter.asStateFlow()
-
     private val mSortMode = MutableStateFlow(SortMode.CREATED_DESC)
     val _sortMode: StateFlow<SortMode> = mSortMode.asStateFlow()
 
@@ -60,7 +56,6 @@ class PinListViewModel(
         mPins,
         mSearchQuery,
         mSelectedCategoryId,
-        mMarkFilter,
         mSortMode,
         mCurrentLat,
         mCurrentLng,
@@ -69,20 +64,15 @@ class PinListViewModel(
         val pins = values[0] as List<Pin>
         val query = values[1] as String
         val categoryId = values[2] as Long?
-        val markFilter = values[3] as MarkKind?
-        val sort = values[4] as SortMode
-        val lat = values[5] as Double
-        val lng = values[6] as Double
-        val fieldTextByPin = values[7] as Map<Long, String>
+        val sort = values[3] as SortMode
+        val lat = values[4] as Double
+        val lng = values[5] as Double
+        val fieldTextByPin = values[6] as Map<Long, String>
 
         var result = pins
 
         if (categoryId != null) {
             result = result.filter { it.categoryId == categoryId }
-        }
-
-        if (markFilter != null) {
-            result = result.filter { it.markKind == markFilter }
         }
 
         if (query.isNotBlank()) {
@@ -184,10 +174,6 @@ class PinListViewModel(
 
     fun setSortMode(mode: SortMode) {
         mSortMode.value = mode
-    }
-
-    fun setMarkFilter(kind: MarkKind?) {
-        mMarkFilter.value = if (mMarkFilter.value == kind) null else kind
     }
 
     fun setMarkKind(pin: Pin, kind: MarkKind) {

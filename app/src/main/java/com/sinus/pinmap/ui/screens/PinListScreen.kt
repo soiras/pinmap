@@ -66,7 +66,6 @@ fun PinListScreen(
     val categories by viewModel._categories.collectAsState()
     val searchQuery by viewModel._searchQuery.collectAsState()
     val selectedCategoryId by viewModel._selectedCategoryId.collectAsState()
-    val markFilter by viewModel._markFilter.collectAsState()
     val sortMode by viewModel._sortMode.collectAsState()
     val currentLat by viewModel.currentLat.collectAsState()
     val currentLng by viewModel.currentLng.collectAsState()
@@ -118,16 +117,6 @@ fun PinListScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MarkKindFilterChip(
-                        kind = MarkKind.MUST_EAT,
-                        selected = markFilter == MarkKind.MUST_EAT,
-                        onClick = { viewModel.setMarkFilter(MarkKind.MUST_EAT) }
-                    )
-                    MarkKindFilterChip(
-                        kind = MarkKind.WATCHED,
-                        selected = markFilter == MarkKind.WATCHED,
-                        onClick = { viewModel.setMarkFilter(MarkKind.WATCHED) }
-                    )
                     FilterChip(
                         selected = selectedCategoryId == null,
                         onClick = { viewModel.setSelectedCategory(null) },
@@ -302,33 +291,6 @@ fun PinListScreen(
 }
 
 private val FILTER_CHIP_HEIGHT = 36.dp
-
-@Composable
-private fun MarkKindFilterChip(
-    kind: MarkKind,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    kind.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = if (selected) kind.color else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(kind.label)
-            }
-        },
-        modifier = Modifier.height(FILTER_CHIP_HEIGHT)
-    )
-}
 
 private val PIN_AVATAR_SIZE = 48.dp
 private val DISTANCE_GREEN = Color(0xFF4CAF50)
