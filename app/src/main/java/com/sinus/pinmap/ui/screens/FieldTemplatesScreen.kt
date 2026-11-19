@@ -51,13 +51,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 /** 拖动框中线落在目标卡片中线上下各 1/3 高度内，才算「融合」，否则按上下半区换行 */
 private const val MERGE_BAND_RATIO = 1f / 3f
 
 /** 换行提示线的粗细 */
 private const val INSERT_LINE_HEIGHT_DP = 3
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FieldTemplatesScreen(
     categoryId: Long,
