@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.entity.FieldType
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
@@ -42,8 +43,9 @@ class PinListViewModel(
     private val mSelectedCategoryId = MutableStateFlow<Long?>(null)
     val _selectedCategoryId: StateFlow<Long?> = mSelectedCategoryId.asStateFlow()
 
-    private val mOnlyFavorite = MutableStateFlow(false)
-    val _onlyFavorite: StateFlow<Boolean> = mOnlyFavorite.asStateFlow()
+    // null 表示不按三态过滤
+    private val mMarkFilter = MutableStateFlow<MarkKind?>(null)
+    val _markFilter: StateFlow<MarkKind?> = mMarkFilter.asStateFlow()
 
     private val mSortMode = MutableStateFlow(SortMode.CREATED_DESC)
     val _sortMode: StateFlow<SortMode> = mSortMode.asStateFlow()
@@ -57,7 +59,7 @@ class PinListViewModel(
         mPins,
         mSearchQuery,
         mSelectedCategoryId,
-        mOnlyFavorite,
+        mMarkFilter,
         mSortMode,
         mCurrentLat,
         mCurrentLng,
@@ -66,7 +68,7 @@ class PinListViewModel(
         val pins = values[0] as List<Pin>
         val query = values[1] as String
         val categoryId = values[2] as Long?
-        val onlyFavorite = values[3] as Boolean
+        val markFilter = values[3] as MarkKind?
         val sort = values[4] as SortMode
         val lat = values[5] as Double
         val lng = values[6] as Double
@@ -78,8 +80,8 @@ class PinListViewModel(
             result = result.filter { it.categoryId == categoryId }
         }
 
-        if (onlyFavorite) {
-            result = result.filter { it.isFavorite }
+        if (markFilter != null) {
+            result = result.filter { it.markKind == markFilter }
         }
 
         if (query.isNotBlank()) {
@@ -100,9 +102,9 @@ class PinListViewModel(
             SortMode.CREATED_DESC -> result = result.sortedByDescending { it.createdAt }
         }
 
-        // 星标置顶：星标标记始终排在最前
+        // 必吃置顶、其次关注，其余保持当前排序
         result = result.sortedWith(
-            compareByDescending<Pin> { it.isFavorite }
+            compareByDescending<Pin> { markPriority(it.markKind) }
                 .thenComparator { a, b ->
                     when (sort) {
                         SortMode.NAME_ASC -> a.title.compareTo(b.title, ignoreCase = true)
@@ -183,13 +185,13 @@ class PinListViewModel(
         mSortMode.value = mode
     }
 
-    fun setOnlyFavorite(onlyFavorite: Boolean) {
-        mOnlyFavorite.value = onlyFavorite
+    fun setMarkFilter(kind: MarkKind?) {
+        mMarkFilter.value = if (mMarkFilter.value == kind) null else kind
     }
 
-    fun toggleFavorite(pin: Pin) {
+    fun setMarkKind(pin: Pin, kind: MarkKind) {
         viewModelScope.launch {
-            mPinRepository.updatePin(pin.copy(isFavorite = !pin.isFavorite))
+            mPinRepository.updateMarkKind(pin.id, kind)
         }
     }
 
@@ -207,4 +209,11 @@ class PinListViewModel(
     suspend fun getPinById(pinId: Long): Pin? {
         return mPinRepository.getPinById(pinId)
     }
+}
+
+/** 列表置顶优先级：必吃 > 关注 > 无 */
+private fun markPriority(kind: MarkKind): Int = when (kind) {
+    MarkKind.MUST_EAT -> 2
+    MarkKind.WATCHED -> 1
+    MarkKind.NONE -> 0
 }

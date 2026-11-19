@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,12 +26,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sinus.pinmap.data.database.PinmapDatabase
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.color
 import com.sinus.pinmap.ui.components.MediaImageView
+import com.sinus.pinmap.ui.icon
+import com.sinus.pinmap.ui.label
 import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.utils.MediaFileHelper
 import com.sinus.pinmap.ui.utils.haversineDistance
@@ -63,7 +66,7 @@ fun PinListScreen(
     val categories by viewModel._categories.collectAsState()
     val searchQuery by viewModel._searchQuery.collectAsState()
     val selectedCategoryId by viewModel._selectedCategoryId.collectAsState()
-    val onlyFavorite by viewModel._onlyFavorite.collectAsState()
+    val markFilter by viewModel._markFilter.collectAsState()
     val sortMode by viewModel._sortMode.collectAsState()
 
     var showDeleteDialog by remember { mutableStateOf<Pin?>(null) }
@@ -113,24 +116,15 @@ fun PinListScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilterChip(
-                        selected = onlyFavorite,
-                        onClick = { viewModel.setOnlyFavorite(!onlyFavorite) },
-                        label = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = if (onlyFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text("星标")
-                            }
-                        },
-                        modifier = Modifier.height(FILTER_CHIP_HEIGHT)
+                    MarkKindFilterChip(
+                        kind = MarkKind.MUST_EAT,
+                        selected = markFilter == MarkKind.MUST_EAT,
+                        onClick = { viewModel.setMarkFilter(MarkKind.MUST_EAT) }
+                    )
+                    MarkKindFilterChip(
+                        kind = MarkKind.WATCHED,
+                        selected = markFilter == MarkKind.WATCHED,
+                        onClick = { viewModel.setMarkFilter(MarkKind.WATCHED) }
                     )
                     FilterChip(
                         selected = selectedCategoryId == null,
@@ -257,7 +251,7 @@ fun PinListScreen(
                             pin.latitude, pin.longitude
                         ) / 1000f,
                         onClick = { onPinClick(pin.id) },
-                        onToggleFavorite = { viewModel.toggleFavorite(pin) },
+                        onSetMark = { kind -> viewModel.setMarkKind(pin, kind) },
                         onDelete = { showDeleteDialog = pin }
                     )
                 }
@@ -306,6 +300,34 @@ fun PinListScreen(
 }
 
 private val FILTER_CHIP_HEIGHT = 36.dp
+
+@Composable
+private fun MarkKindFilterChip(
+    kind: MarkKind,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    kind.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = if (selected) kind.color else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(kind.label)
+            }
+        },
+        modifier = Modifier.height(FILTER_CHIP_HEIGHT)
+    )
+}
+
 private val PIN_AVATAR_SIZE = 48.dp
 private val DISTANCE_GREEN = Color(0xFF4CAF50)
 
@@ -315,7 +337,7 @@ private fun PinItem(
     category: com.sinus.pinmap.data.entity.Category?,
     distanceKm: Float,
     onClick: () -> Unit,
-    onToggleFavorite: () -> Unit,
+    onSetMark: (MarkKind) -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -390,16 +412,39 @@ private fun PinItem(
                 }
             }
 
-            IconButton(
-                onClick = onToggleFavorite,
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = if (pin.isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) {
-                Icon(
-                    Icons.Default.Star,
-                    contentDescription = if (pin.isFavorite) "取消星标" else "设为星标"
-                )
+            Box {
+                var showMarkMenu by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = { showMarkMenu = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = pin.markKind.color
+                    )
+                ) {
+                    Icon(
+                        pin.markKind.icon,
+                        contentDescription = "标记状态：${pin.markKind.label}"
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMarkMenu,
+                    onDismissRequest = { showMarkMenu = false }
+                ) {
+                    MarkKind.entries.forEach { kind ->
+                        DropdownMenuItem(
+                            text = { Text(kind.label) },
+                            onClick = {
+                                showMarkMenu = false
+                                if (kind != pin.markKind) onSetMark(kind)
+                            },
+                            leadingIcon = {
+                                Icon(kind.icon, contentDescription = null, tint = kind.color)
+                            },
+                            trailingIcon = if (pin.markKind == kind) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
+                    }
+                }
             }
 
             IconButton(

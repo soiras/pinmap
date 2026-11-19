@@ -29,7 +29,7 @@ import com.sinus.pinmap.data.entity.Pin
         Attachment::class,
         OfflineMap::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -114,6 +114,42 @@ abstract class PinmapDatabase : RoomDatabase() {
             db.addColumnIfMissing("field_values", "mediaOffsetY", "REAL NOT NULL DEFAULT 0.0")
         }
 
+        val mMigration_9_10 = Migration(9, 10) { db ->
+            // 三态标记：必吃 / 关注 / 无。老数据的星标语义就是必吃。
+            // isFavorite 不再使用，但 SQLite 的老版本不支持 DROP COLUMN，所以整表重建
+            db.execSQL("DROP TABLE IF EXISTS pins_new")
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS pins_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    categoryId INTEGER,
+                    avatarPath TEXT,
+                    address TEXT,
+                    markKind TEXT NOT NULL DEFAULT 'NONE',
+                    avatarScale REAL NOT NULL DEFAULT 1.0,
+                    avatarOffsetX REAL NOT NULL DEFAULT 0.0,
+                    avatarOffsetY REAL NOT NULL DEFAULT 0.0,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("""
+                INSERT INTO pins_new (id, latitude, longitude, title, description, categoryId,
+                    avatarPath, address, markKind, avatarScale, avatarOffsetX, avatarOffsetY,
+                    createdAt, updatedAt)
+                SELECT id, latitude, longitude, title, description, categoryId,
+                    avatarPath, address,
+                    CASE WHEN isFavorite = 1 THEN 'MUST_EAT' ELSE 'NONE' END,
+                    avatarScale, avatarOffsetX, avatarOffsetY, createdAt, updatedAt
+                FROM pins
+            """)
+            db.execSQL("DROP TABLE pins")
+            db.execSQL("ALTER TABLE pins_new RENAME TO pins")
+        }
+
         fun getDatabase(context: Context): PinmapDatabase {
             return mInstance ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -121,7 +157,10 @@ abstract class PinmapDatabase : RoomDatabase() {
                     PinmapDatabase::class.java,
                     "pinmap_database"
                 )
-                    .addMigrations(mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7, mMigration_7_8, mMigration_8_9)
+                    .addMigrations(
+                        mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7,
+                        mMigration_7_8, mMigration_8_9, mMigration_9_10
+                    )
                     // 老版本（如 v2）无迁移路径时直接重建数据库，避免启动崩溃
                     .fallbackToDestructiveMigration()
                     .build()

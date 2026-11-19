@@ -9,6 +9,7 @@ import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.entity.FieldTemplate
 import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.FieldValue
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
@@ -61,7 +62,7 @@ object PinImporter {
         val description: String?,
         val address: String?,
         val avatarEntry: String?,
-        val isFavorite: Boolean,
+        val markKind: MarkKind,
         val avatarScale: Float,
         val avatarOffsetX: Float,
         val avatarOffsetY: Float,
@@ -198,7 +199,7 @@ object PinImporter {
                         categoryId = categoryId,
                         avatarPath = avatarPath,
                         address = pinData.address,
-                        isFavorite = pinData.isFavorite,
+                        markKind = pinData.markKind,
                         avatarScale = pinData.avatarScale,
                         avatarOffsetX = pinData.avatarOffsetX,
                         avatarOffsetY = pinData.avatarOffsetY,
@@ -386,6 +387,13 @@ object PinImporter {
         return ImportFile(categories, orphanPins)
     }
 
+    /** v4 起直接写 markKind；更早的版本只有 isFavorite，星标即必吃 */
+    private fun parseMarkKind(pinJson: JSONObject): MarkKind {
+        val raw = pinJson.optString("markKind", "")
+        return MarkKind.entries.firstOrNull { it.name == raw }
+            ?: if (pinJson.optBoolean("isFavorite", false)) MarkKind.MUST_EAT else MarkKind.NONE
+    }
+
     private fun parsePin(pinJson: JSONObject): PinData {
         val values = mutableListOf<FieldValueData>()
         val valuesJson = pinJson.optJSONArray("fieldValues")
@@ -414,7 +422,7 @@ object PinImporter {
             description = pinJson.optNullableString("description"),
             address = pinJson.optNullableString("address"),
             avatarEntry = pinJson.optNullableString("avatarFile"),
-            isFavorite = pinJson.optBoolean("isFavorite", false),
+            markKind = parseMarkKind(pinJson),
             avatarScale = pinJson.optDouble("avatarScale", 1.0).toFloat(),
             avatarOffsetX = pinJson.optDouble("avatarOffsetX", 0.0).toFloat(),
             avatarOffsetY = pinJson.optDouble("avatarOffsetY", 0.0).toFloat(),

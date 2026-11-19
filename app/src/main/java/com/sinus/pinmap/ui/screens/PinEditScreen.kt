@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,12 +77,16 @@ import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.entity.FieldTemplate
 import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.FieldValue
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.CategoryRepository
 import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.color
 import com.sinus.pinmap.ui.components.MediaAdjuster
+import com.sinus.pinmap.ui.icon
+import com.sinus.pinmap.ui.label
 import com.sinus.pinmap.ui.components.MediaImageView
 import com.sinus.pinmap.ui.utils.PinExporter
 import com.amap.api.services.core.PoiItemV2
@@ -167,7 +170,7 @@ fun PinEditScreen(
     var editingAvatarScale by remember { mutableFloatStateOf(1f) }
     var editingAvatarOffsetX by remember { mutableFloatStateOf(0f) }
     var editingAvatarOffsetY by remember { mutableFloatStateOf(0f) }
-    var isFavorite by remember { mutableStateOf(false) }
+    var markKind by remember { mutableStateOf(MarkKind.NONE) }
     var address by remember { mutableStateOf("") }
     var pinLat by remember { mutableDoubleStateOf(lat) }
     var pinLng by remember { mutableDoubleStateOf(lng) }
@@ -190,7 +193,7 @@ fun PinEditScreen(
                 selectedCategory = categories.find { it.id == pin.categoryId }
                 avatarPath = pin.avatarPath
                 address = pin.address ?: ""
-                isFavorite = pin.isFavorite
+                markKind = pin.markKind
                 avatarScale = pin.avatarScale
                 avatarOffsetX = pin.avatarOffsetX
                 avatarOffsetY = pin.avatarOffsetY
@@ -405,12 +408,38 @@ fun PinEditScreen(
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "导出标记")
                         }
-                        IconButton(onClick = { isFavorite = !isFavorite; markDirty() }) {
-                            Icon(
-                                Icons.Default.Star,
-                                contentDescription = if (isFavorite) "取消星标" else "设为星标",
-                                tint = if (isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Box {
+                            var showMarkMenu by remember { mutableStateOf(false) }
+                            IconButton(onClick = { showMarkMenu = true }) {
+                                Icon(
+                                    markKind.icon,
+                                    contentDescription = "标记状态：${markKind.label}",
+                                    tint = markKind.color
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMarkMenu,
+                                onDismissRequest = { showMarkMenu = false }
+                            ) {
+                                MarkKind.entries.forEach { kind ->
+                                    DropdownMenuItem(
+                                        text = { Text(kind.label) },
+                                        onClick = {
+                                            showMarkMenu = false
+                                            if (kind != markKind) {
+                                                markKind = kind
+                                                markDirty()
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(kind.icon, contentDescription = null, tint = kind.color)
+                                        },
+                                        trailingIcon = if (markKind == kind) {
+                                            { Icon(Icons.Default.Check, contentDescription = null) }
+                                        } else null
+                                    )
+                                }
+                            }
                         }
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除标记")
@@ -774,13 +803,13 @@ fun PinEditScreen(
                             }
                             val id = when {
                                 pinId == 0L -> {
-                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
+                                    val newId = pinRepository.insertPin(Pin(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, markKind = markKind, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
                                     pinId = newId
                                     newId
                                 }
                                 else -> {
                                     pinRepository.getPinById(pinId)?.let { pin ->
-                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, isFavorite = isFavorite, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
+                                        pinRepository.updatePin(pin.copy(latitude = pinLat, longitude = pinLng, title = title, categoryId = categoryId, avatarPath = finalAvatar, address = address.ifEmpty { null }, markKind = markKind, avatarScale = editingAvatarScale, avatarOffsetX = editingAvatarOffsetX, avatarOffsetY = editingAvatarOffsetY))
                                     }
                                     pinId
                                 }

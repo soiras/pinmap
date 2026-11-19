@@ -52,8 +52,11 @@ import com.amap.api.maps.model.MarkerOptions
 import com.amap.api.services.poisearch.PoiSearchV2
 import com.sinus.pinmap.data.database.PinmapDatabase
 import com.sinus.pinmap.data.entity.FieldType
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import com.sinus.pinmap.data.repository.PinRepository
+import com.sinus.pinmap.ui.icon
+import com.sinus.pinmap.ui.label
 import com.sinus.pinmap.ui.utils.LocationManager
 import com.sinus.pinmap.ui.viewmodel.MapHolderViewModel
 import com.sinus.pinmap.ui.viewmodel.MapViewModel
@@ -109,12 +112,12 @@ fun MapScreen(
     val pins by viewModel._pins.collectAsState()
     val categories by categoryRepository.getAllCategories().collectAsState(initial = emptyList())
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-    var mapOnlyFavorite by remember { mutableStateOf(false) }
-    val filteredPins by remember(pins, selectedCategoryId, mapOnlyFavorite) {
+    var markFilter by remember { mutableStateOf<MarkKind?>(null) }
+    val filteredPins by remember(pins, selectedCategoryId, markFilter) {
         derivedStateOf {
             var result = if (selectedCategoryId == null) pins else pins.filter { it.categoryId == selectedCategoryId }
-            if (mapOnlyFavorite) {
-                result = result.filter { it.isFavorite }
+            if (markFilter != null) {
+                result = result.filter { it.markKind == markFilter }
             }
             result
         }
@@ -735,25 +738,34 @@ fun MapScreen(
             ) {
                 DropdownMenuItem(
                     text = { Text("全部") },
-                    onClick = { selectedCategoryId = null; showCategoryFilter = false },
-                    leadingIcon = if (selectedCategoryId == null) {
-                        { Icon(Icons.Default.Check, contentDescription = null) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text("星标") },
-                    onClick = { mapOnlyFavorite = !mapOnlyFavorite; showCategoryFilter = false },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint = if (mapOnlyFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    onClick = {
+                        selectedCategoryId = null
+                        markFilter = null
+                        showCategoryFilter = false
                     },
-                    trailingIcon = if (mapOnlyFavorite) {
+                    leadingIcon = if (selectedCategoryId == null && markFilter == null) {
                         { Icon(Icons.Default.Check, contentDescription = null) }
                     } else null
                 )
+                MarkKind.entries.filter { it != MarkKind.NONE }.forEach { kind ->
+                    DropdownMenuItem(
+                        text = { Text(kind.label) },
+                        onClick = {
+                            markFilter = if (markFilter == kind) null else kind
+                            showCategoryFilter = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                kind.icon,
+                                contentDescription = null,
+                                tint = if (kind == MarkKind.MUST_EAT) Color(0xFFF57C00) else Color(0xFF1E88E5)
+                            )
+                        },
+                        trailingIcon = if (markFilter == kind) {
+                            { Icon(Icons.Default.Check, contentDescription = null) }
+                        } else null
+                    )
+                }
                 categories.forEach { category ->
                     DropdownMenuItem(
                         text = { Text(category.name) },
@@ -926,6 +938,21 @@ fun MapScreen(
                     paint.style = Paint.Style.FILL
                 }
 
+                // 三态标记的小角标（必吃橙、关注蓝）
+                if (pin.markKind != MarkKind.NONE) {
+                    val badgeR = size * MARKER_BADGE_RADIUS_RATIO
+                    val badgeCx = size - badgeR - PADDING_2F
+                    val badgeCy = if (avatarBitmap != null) badgeR + PADDING_2F else badgeR + PADDING_4F
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (pin.markKind == MarkKind.MUST_EAT) MARKER_MUST_EAT_COLOR else MARKER_WATCHED_COLOR
+                    canvas.drawCircle(badgeCx, badgeCy, badgeR, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = MARKER_BADGE_STROKE
+                    paint.color = COLOR_WHITE_INT
+                    canvas.drawCircle(badgeCx, badgeCy, badgeR, paint)
+                    paint.style = Paint.Style.FILL
+                }
+
                 return BitmapDescriptorFactory.fromBitmap(bubble)
             }
 
@@ -936,6 +963,7 @@ fun MapScreen(
                 val pinChanged = prevPin == null || prevPin.title != pin.title ||
                     prevPin.avatarPath != pin.avatarPath ||
                     prevPin.categoryId != pin.categoryId ||
+                    prevPin.markKind != pin.markKind ||
                     prevPin.latitude != pin.latitude ||
                     prevPin.longitude != pin.longitude
                 val highlightChanged = pin.id == highlightedPinId || pin.id == previousHighlightedPinId
@@ -1026,6 +1054,10 @@ fun MapScreen(
 private val DEFAULT_PIN_COLOR = 0xFF666666.toInt()
 private val COLOR_WHITE_INT = 0xFFFFFFFF.toInt()
 private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
+private val MARKER_MUST_EAT_COLOR = 0xFFF57C00.toInt()
+private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
+private val MARKER_BADGE_RADIUS_RATIO = 0.22f
+private val MARKER_BADGE_STROKE = 2f
 private val NAV_BAR_GAP = 80.dp
 private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp

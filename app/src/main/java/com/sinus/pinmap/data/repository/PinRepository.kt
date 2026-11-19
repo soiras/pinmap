@@ -1,6 +1,7 @@
 package com.sinus.pinmap.data.repository
 
 import com.sinus.pinmap.data.store.PinStore
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import kotlinx.coroutines.flow.Flow
 /**
@@ -22,4 +23,6 @@ class PinRepository(private val mPinStore: PinStore) {
     suspend fun deletePin(pin: Pin) = mPinStore.deletePin(pin)
 
     suspend fun deletePinById(pinId: Long) = mPinStore.deletePinById(pinId)
+
+    suspend fun updateMarkKind(pinId: Long, kind: MarkKind) = mPinStore.updateMarkKind(pinId, kind)
 }

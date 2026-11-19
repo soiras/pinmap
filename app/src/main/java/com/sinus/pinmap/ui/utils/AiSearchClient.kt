@@ -5,6 +5,7 @@ import com.sinus.pinmap.data.entity.Category
 import com.sinus.pinmap.data.entity.FieldTemplate
 import com.sinus.pinmap.data.entity.FieldType
 import com.sinus.pinmap.data.entity.FieldValue
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -85,7 +86,7 @@ object AiSearchClient {
 
         fun formatTable(catName: String): String {
             val dynamicColumns = fieldsForCategory(catName)
-            val columns = listOf("ID") + baseColumns + dynamicColumns
+            val columns = listOf("ID", "标记") + baseColumns + dynamicColumns
             val header = columns.joinToString(" | ")
             val rows = byCategory[catName].orEmpty().map { pin ->
                 val distance = if (lat != null && lng != null) {
@@ -97,9 +98,15 @@ object AiSearchClient {
                     }?.value
                     value?.takeIf { it.isNotBlank() } ?: "-"
                 }
+                val markLabel = when (pin.markKind) {
+                    MarkKind.MUST_EAT -> "必吃"
+                    MarkKind.WATCHED -> "关注"
+                    MarkKind.NONE -> "-"
+                }
                 val values = listOfNotNull(
                     pin.id.toString(),
-                    if (pin.isFavorite) "★${pin.title}" else pin.title,
+                    markLabel,
+                    pin.title,
                     pin.description,
                     pin.address,
                     distance
@@ -115,10 +122,10 @@ object AiSearchClient {
 
         val prompt = buildString {
             append("你是标记数据搜索助手。以下是用户记录的地点标记列表，按分类分为多个表格，每个表格第一行是列名：\n")
-            append("标题前带 ★ 的标记是用户标记的重点（星标），匹配时应优先考虑。\n")
+            append("「标记」列表示用户的意向：必吃 = 最想去的重点，关注 = 感兴趣但次之，- = 普通记录。\n")
             append(tables)
             append("\n\n用户想找：$query\n")
-            append("请从上面的标记中选出最匹配的，按相关度降序排列；星标标记在同等相关度下排前。\n")
+            append("请从上面的标记中选出最匹配的，按相关度降序排列；必吃标记在同等相关度下优先，其次是关注。\n")
             append("必须至少返回 1 个最接近的标记 ID；即使不确定也返回最接近的那个。\n")
             append("严格输出 JSON：{\"ids\": [12, 31]}，不要输出任何其他内容。")
         }

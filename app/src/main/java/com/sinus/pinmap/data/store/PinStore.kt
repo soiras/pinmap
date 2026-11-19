@@ -1,6 +1,7 @@
 package com.sinus.pinmap.data.store
 
 import androidx.room.*
+import com.sinus.pinmap.data.entity.MarkKind
 import com.sinus.pinmap.data.entity.Pin
 import kotlinx.coroutines.flow.Flow
 
@@ -29,4 +30,7 @@ interface PinStore {
 
     @Query("DELETE FROM pins WHERE id = :pinId")
     suspend fun deletePinById(pinId: Long)
+
+    @Query("UPDATE pins SET markKind = :kind WHERE id = :pinId")
+    suspend fun updateMarkKind(pinId: Long, kind: MarkKind)
 }

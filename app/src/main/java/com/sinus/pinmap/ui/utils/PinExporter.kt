@@ -19,7 +19,7 @@ import java.util.zip.ZipOutputStream
 object PinExporter {
 
     private const val COPY_BUFFER_SIZE = 64 * 1024
-    private const val FORMAT_VERSION = 3
+    private const val FORMAT_VERSION = 4
     private val COMPRESSED_EXTENSIONS = setOf(
         "jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "m4v",
         "3gp", "avi", "mkv", "webm", "mp3", "aac", "m4a", "flac", "ogg", "opus"
@@ -176,7 +176,7 @@ object PinExporter {
                 put("title", pin.title)
                 put("description", pin.description ?: JSONObject.NULL)
                 put("address", pin.address ?: JSONObject.NULL)
-                put("isFavorite", pin.isFavorite)
+                put("markKind", pin.markKind.name)
                 put("avatarScale", pin.avatarScale.toDouble())
                 put("avatarOffsetX", pin.avatarOffsetX.toDouble())
                 put("avatarOffsetY", pin.avatarOffsetY.toDouble())
