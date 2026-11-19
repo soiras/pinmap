@@ -14,6 +14,8 @@ data class FieldTemplate(
     val fieldName: String,
     val fieldType: FieldType,
     val sortOrder: Int = 0,
+    /** 同一行的分组键：相同 rowKey 的字段渲染在同一行，null 表示独占一行 */
+    val rowKey: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

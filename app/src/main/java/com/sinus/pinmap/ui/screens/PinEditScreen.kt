@@ -84,6 +84,7 @@ import com.sinus.pinmap.data.repository.FieldTemplateRepository
 import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.color
+import com.sinus.pinmap.ui.groupFieldRows
 import com.sinus.pinmap.ui.components.MediaAdjuster
 import com.sinus.pinmap.ui.icon
 import com.sinus.pinmap.ui.label
@@ -625,11 +626,16 @@ fun PinEditScreen(
                     item { Text("字段", style = MaterialTheme.typography.titleSmall) }
                 }
 
-                itemsIndexed(templates) { index, template ->
+                itemsIndexed(groupFieldRows(templates)) { index, row ->
                     if (index > 0) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     }
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        row.forEach { template ->
+                            Column(modifier = Modifier.weight(1f)) {
                         when (template.fieldType) {
                             FieldType.TEXT -> {
                                 val v = editingValues[template.id] ?: fieldValues[template.id]?.firstOrNull()?.value ?: ""
@@ -777,6 +783,8 @@ fun PinEditScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text(if (videos.isEmpty()) "选择视频" else "添加视频") }
+                            }
+                            }
                             }
                         }
                     }

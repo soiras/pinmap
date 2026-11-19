@@ -29,7 +29,7 @@ import com.sinus.pinmap.data.entity.Pin
         Attachment::class,
         OfflineMap::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -150,6 +150,11 @@ abstract class PinmapDatabase : RoomDatabase() {
             db.execSQL("ALTER TABLE pins_new RENAME TO pins")
         }
 
+        val mMigration_10_11 = Migration(10, 11) { db ->
+            // 字段行融合：相同 rowKey 的模板渲染在同一行，null 表示独占一行
+            db.addColumnIfMissing("field_templates", "rowKey", "INTEGER")
+        }
+
         fun getDatabase(context: Context): PinmapDatabase {
             return mInstance ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -159,7 +164,8 @@ abstract class PinmapDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         mMigration_3_4, mMigration_4_5, mMigration_5_6, mMigration_6_7,
-                        mMigration_7_8, mMigration_8_9, mMigration_9_10
+                        mMigration_7_8, mMigration_8_9, mMigration_9_10,
+                        mMigration_10_11
                     )
                     // 老版本（如 v2）无迁移路径时直接重建数据库，避免启动崩溃
                     .fallbackToDestructiveMigration()

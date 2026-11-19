@@ -44,7 +44,8 @@ object PinImporter {
         val oldId: Long,
         val fieldName: String,
         val fieldType: FieldType,
-        val sortOrder: Int
+        val sortOrder: Int,
+        val rowKey: Long? = null
     )
 
     private data class FieldValueData(
@@ -266,6 +267,7 @@ object PinImporter {
 
                 // 模板：按 (分类, 字段名) 合并，取并集
                 val oldTemplateIdMap = mutableMapOf<Long, Long>()
+                val templateRowKeys = mutableListOf<Pair<FieldTemplate, Long>>()
                 var existingTemplates = templateRepo.getFieldTemplatesByCategory(category.id).first()
                 for (templateData in catData.templates) {
                     var template = existingTemplates.firstOrNull { it.fieldName == templateData.fieldName }
@@ -291,6 +293,16 @@ object PinImporter {
                         newTemplateCount++
                     }
                     oldTemplateIdMap[templateData.oldId] = template.id
+                    if (templateData.rowKey != null) templateRowKeys += template to templateData.rowKey
+                }
+                // rowKey 里存的是文件中的旧模板 id，需要重映射到新 id；
+                // 目标模板缺失时退化为独占一行
+                templateRowKeys.forEach { (template, oldRowKey) ->
+                    val mapped = oldTemplateIdMap[oldRowKey] ?: return@forEach
+                    if (mapped != template.id) {
+                        templateRepo.updateFieldTemplate(template.copy(rowKey = mapped))
+                        existingTemplates = existingTemplates.map { if (it.id == template.id) it.copy(rowKey = mapped) else it }
+                    }
                 }
                 val templateTypeMap = existingTemplates.associate { it.id to it.fieldType }
                 globalTemplateIdMap.putAll(oldTemplateIdMap)
@@ -350,7 +362,8 @@ object PinImporter {
                             fieldName = ftJson.optString("fieldName", ""),
                             fieldType = runCatching { FieldType.valueOf(ftJson.optString("fieldType", "")) }
                                 .getOrDefault(FieldType.TEXT),
-                            sortOrder = ftJson.optInt("sortOrder", 0)
+                            sortOrder = ftJson.optInt("sortOrder", 0),
+                            rowKey = ftJson.optLong("rowKey", -1L).takeIf { it > 0 }
                         )
                     )
                 }

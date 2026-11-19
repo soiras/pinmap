@@ -19,7 +19,7 @@ import java.util.zip.ZipOutputStream
 object PinExporter {
 
     private const val COPY_BUFFER_SIZE = 64 * 1024
-    private const val FORMAT_VERSION = 4
+    private const val FORMAT_VERSION = 5
     private val COMPRESSED_EXTENSIONS = setOf(
         "jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "m4v",
         "3gp", "avi", "mkv", "webm", "mp3", "aac", "m4a", "flac", "ogg", "opus"
@@ -207,6 +207,7 @@ object PinExporter {
                             put("fieldName", ft.fieldName)
                             put("fieldType", ft.fieldType.name)
                             put("sortOrder", ft.sortOrder)
+                            ft.rowKey?.let { rowKey -> put("rowKey", rowKey) }
                         })
                     }
                     put("fieldTemplates", ftArray)
