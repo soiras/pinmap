@@ -375,7 +375,25 @@ fun MapScreen(
             // 设置标记点击事件
             aMap.setOnMarkerClickListener { marker ->
                 marker.hideInfoWindow()
-                val pinId = marker.snippet?.toLongOrNull() ?: return@setOnMarkerClickListener false
+                val clickedId = marker.snippet?.toLongOrNull() ?: return@setOnMarkerClickListener false
+                // 高德在标记重叠时会把点击派发给叠在最下面的那个，而搜索结果里被高亮的标记画在最上面，
+                // 于是点击总是落到旁边那个标记上。这里按屏幕坐标判断点击点是否落在高亮标记的范围里，
+                // 命中就转给高亮标记，保证"看到的是谁，点开的就是谁"。
+                val highlightedId = highlightedPinId
+                val pinId = if (highlightedId != null && highlightedId != clickedId) {
+                    val highlightedPin = pins.find { it.id == highlightedId }
+                    val density = context.resources.displayMetrics.density
+                    val markerWidthPx = MARKER_SIZE_PX * density
+                    val markerHeightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
+                    if (highlightedPin != null && isInsideMarkerBounds(
+                            aMap,
+                            marker.position,
+                            LatLng(highlightedPin.latitude, highlightedPin.longitude),
+                            markerWidthPx,
+                            markerHeightPx
+                        )
+                    ) highlightedId else clickedId
+                } else clickedId
                 val pin = pins.find { it.id == pinId }
                 if (pin?.avatarPath != null) {
                     viewerPin = pin
@@ -929,6 +947,7 @@ fun MapScreen(
                     .snippet(pin.id.toString())
                     .draggable(true)
                     .anchor(0.5f, 1.0f)
+                    .zIndex(if (pin.id == highlightedPinId) HIGHLIGHT_MARKER_Z_INDEX else DEFAULT_MARKER_Z_INDEX)
 
                 val marker = aMap.addMarker(markerOptions)
                 marker?.let { newMap[pin.id] = it }
@@ -1003,6 +1022,25 @@ private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
 private val SEARCH_ITEM_V_PADDING = 8.dp
 
+/**
+ * 判断 [point] 是否落在以 [markerPosition] 为锚点（anchor 0.5, 1.0）的标记图标范围内。
+ * 用于解决高德"重叠时点击响应最下层标记"导致点错的问题。
+ */
+private fun isInsideMarkerBounds(
+    aMap: com.amap.api.maps.AMap,
+    point: LatLng,
+    markerPosition: LatLng,
+    widthPx: Float,
+    heightPx: Float
+): Boolean = try {
+    val p = aMap.projection.toScreenLocation(point)
+    val m = aMap.projection.toScreenLocation(markerPosition)
+    p.x >= m.x - widthPx / 2f && p.x <= m.x + widthPx / 2f &&
+        p.y >= m.y - heightPx && p.y <= m.y
+} catch (_: Exception) {
+    false
+}
+
 @Composable
 private fun SearchResultItem(
     title: String,
@@ -1043,5 +1081,7 @@ private const val TEXT_SIZE_MULTIPLIER = 1.4f
 private const val ARROW_HALF_WIDTH = 10f
 private const val PADDING_4F = 4f
 private const val PADDING_2F = 2f
+private const val HIGHLIGHT_MARKER_Z_INDEX = 990f
+private const val DEFAULT_MARKER_Z_INDEX = 0f
 private const val ZOOM_LOCATION = 15f
 private const val ZOOM_SEARCH = 16f
