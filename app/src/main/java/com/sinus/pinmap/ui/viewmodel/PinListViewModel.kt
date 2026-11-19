@@ -52,8 +52,9 @@ class PinListViewModel(
 
     private val mCurrentLat = MutableStateFlow(LocationManager.DEFAULT_LATITUDE)
     private val mCurrentLng = MutableStateFlow(LocationManager.DEFAULT_LONGITUDE)
-    val _currentLat: Double get() = mCurrentLat.value
-    val _currentLng: Double get() = mCurrentLng.value
+    // 对外暴露成 Flow，列表页 collect 后才能随定位变化重组；读 .value 不会触发重组
+    val currentLat: StateFlow<Double> = mCurrentLat.asStateFlow()
+    val currentLng: StateFlow<Double> = mCurrentLng.asStateFlow()
 
     val filteredPins: StateFlow<List<Pin>> = combine(
         mPins,

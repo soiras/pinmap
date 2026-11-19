@@ -68,6 +68,8 @@ fun PinListScreen(
     val selectedCategoryId by viewModel._selectedCategoryId.collectAsState()
     val markFilter by viewModel._markFilter.collectAsState()
     val sortMode by viewModel._sortMode.collectAsState()
+    val currentLat by viewModel.currentLat.collectAsState()
+    val currentLng by viewModel.currentLng.collectAsState()
 
     var showDeleteDialog by remember { mutableStateOf<Pin?>(null) }
 
@@ -247,7 +249,7 @@ fun PinListScreen(
                         pin = pin,
                         category = categories.find { it.id == pin.categoryId },
                         distanceKm = haversineDistance(
-                            viewModel._currentLat, viewModel._currentLng,
+                            currentLat, currentLng,
                             pin.latitude, pin.longitude
                         ) / 1000f,
                         onClick = { onPinClick(pin.id) },
