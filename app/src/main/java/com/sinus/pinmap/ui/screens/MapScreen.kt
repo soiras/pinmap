@@ -866,7 +866,8 @@ fun MapScreen(
                     }
                 }
 
-                val size = context.resources.displayMetrics.density.let { d -> (MARKER_SIZE_PX * d).toInt() }
+                val density = context.resources.displayMetrics.density
+                val size = (MARKER_SIZE_PX * density).toInt()
                 val arrowH = (ARROW_HEIGHT_PX * context.resources.displayMetrics.density).toInt()
                 val totalH = size + arrowH
                 val bubble = createBitmap(size, totalH)
@@ -897,7 +898,7 @@ fun MapScreen(
                     canvas.drawBitmap(avatarBitmap, srcRect, dstRect, null)
                     canvas.restore()
                     paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = STROKE_WIDTH_AVATAR
+                    paint.strokeWidth = if (markBorderColor != null) MARKER_STATE_BORDER_WIDTH_DP * density else STROKE_WIDTH_AVATAR
                     paint.color = markBorderColor ?: COLOR_WHITE_INT
                     canvas.drawCircle(cx, cy, r, paint)
                     paint.style = Paint.Style.FILL
@@ -907,7 +908,7 @@ fun MapScreen(
                     canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
                     if (markBorderColor != null) {
                         paint.style = Paint.Style.STROKE
-                        paint.strokeWidth = STROKE_WIDTH_AVATAR
+                        paint.strokeWidth = MARKER_STATE_BORDER_WIDTH_DP * density
                         paint.color = markBorderColor
                         canvas.drawRoundRect(rect, CORNER_RADIUS_BODY, CORNER_RADIUS_BODY, paint)
                         paint.style = Paint.Style.FILL
@@ -1056,6 +1057,7 @@ private val COLOR_WHITE_INT = 0xFFFFFFFF.toInt()
 private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
 private val MARKER_MUST_EAT_COLOR = 0xFFFFC107.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
+private val MARKER_STATE_BORDER_WIDTH_DP = 2f
 private val NAV_BAR_GAP = 80.dp
 private val FAB_OFFSET = 64.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
