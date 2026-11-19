@@ -80,6 +80,9 @@ fun FieldTemplatesScreen(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var dropPoint by remember { mutableStateOf(Offset.Zero) }
     var hoverKey by remember { mutableStateOf<Long?>(null) }
+    // 拖动开始那一刻拖动框的中心（root 坐标）。拖动过程中不能再读 rowBounds，
+    // 因为带着 graphicsLayer 位移的卡片会把位移算进去，导致落点被算成两倍位移。
+    var dragStartCenter by remember { mutableStateOf(Offset.Zero) }
     val rowBounds = remember { mutableStateMapOf<Long, Rect>() }
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableStateOf(0f) }
@@ -327,14 +330,15 @@ fun FieldTemplatesScreen(
                                             onDragStart = {
                                                 draggingKey = key
                                                 dragOffset = Offset.Zero
-                                                // 以拖动框自身的中心线判定落点
-                                                dropPoint = rowBounds[key]?.center ?: Offset.Zero
+                                                // 以拖动框自身的中心线判定落点，起点只取一次
+                                                dragStartCenter = rowBounds[key]?.center ?: Offset.Zero
+                                                dropPoint = dragStartCenter
                                                 hoverKey = null
                                             },
                                             onDrag = { change, amount ->
                                                 change.consume()
                                                 dragOffset += amount
-                                                dropPoint = (rowBounds[key]?.center ?: Offset.Zero) + dragOffset
+                                                dropPoint = dragStartCenter + dragOffset
                                                 hoverKey = hitTestRow(key, dropPoint)
                                             },
                                             onDragEnd = {
