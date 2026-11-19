@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.sinus.pinmap.ui.components.NavigationDrawer
+import com.sinus.pinmap.ui.navigation.KEY_FOCUS_LAT
+import com.sinus.pinmap.ui.navigation.KEY_FOCUS_LNG
+import com.sinus.pinmap.ui.navigation.ROUTE_TAB_ROOT
 import com.sinus.pinmap.ui.navigation.Screen
 import com.sinus.pinmap.ui.navigation.SubPagesNavGraph
 import com.sinus.pinmap.ui.screens.CategoryListScreen
@@ -59,7 +62,23 @@ class MainActivity : ComponentActivity() {
 
                 val visibleTabs = tabs.filter { it.visible }
                 val tabRoutes = visibleTabs.map { it.route }
-                val isTabScreen = navRoute == "empty"
+                val isTabScreen = navRoute == ROUTE_TAB_ROOT
+
+                // PinEdit 保存/取消返回时把落点写进 root 页的 savedStateHandle，这里取出来交给地图
+                var focusLat by remember { mutableStateOf<Double?>(null) }
+                var focusLng by remember { mutableStateOf<Double?>(null) }
+                LaunchedEffect(navController) {
+                    navController.currentBackStackEntryFlow.collect { entry ->
+                        if (entry.destination.route == ROUTE_TAB_ROOT) {
+                            val lat = entry.savedStateHandle.remove<Double>(KEY_FOCUS_LAT)
+                            val lng = entry.savedStateHandle.remove<Double>(KEY_FOCUS_LNG)
+                            if (lat != null && lng != null) {
+                                focusLat = lat
+                                focusLng = lng
+                            }
+                        }
+                    }
+                }
 
                 ModalNavigationDrawer(
                     drawerState = drawerState,
@@ -120,7 +139,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToCreate = { lat, lng ->
                                     navController.navigate(Screen.PinEdit.createRoute(null, lat, lng))
-                                }
+                                },
+                                focusLat = focusLat,
+                                focusLng = focusLng
                             )
                             PinListScreen(
                                 modifier = Modifier.fillMaxSize().visible(selectedTabIndex == TAB_PIN_LIST),

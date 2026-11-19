@@ -48,7 +48,10 @@ object PinImporter {
 
     private data class FieldValueData(
         val oldTemplateId: Long,
-        val value: String
+        val value: String,
+        val mediaScale: Float,
+        val mediaOffsetX: Float,
+        val mediaOffsetY: Float
     )
 
     private data class PinData(
@@ -59,6 +62,9 @@ object PinImporter {
         val address: String?,
         val avatarEntry: String?,
         val isFavorite: Boolean,
+        val avatarScale: Float,
+        val avatarOffsetX: Float,
+        val avatarOffsetY: Float,
         val createdAt: Long,
         val updatedAt: Long,
         val values: List<FieldValueData>
@@ -75,7 +81,8 @@ object PinImporter {
     )
 
     private data class ImportFile(
-        val categories: List<CategoryData>
+        val categories: List<CategoryData>,
+        val orphanPins: List<PinData>
     )
 
     /**
@@ -84,11 +91,12 @@ object PinImporter {
      */
     suspend fun preview(context: Context, uri: Uri): ImportPreview {
         val file = parseFile(context, uri)
-        Log.d(TAG, "preview: categories=${file.categories.size}, templates=${file.categories.sumOf { it.templates.size }}, pins=${file.categories.sumOf { it.pins.size }}")
+        val pinCount = file.categories.sumOf { it.pins.size } + file.orphanPins.size
+        Log.d(TAG, "preview: categories=${file.categories.size}, templates=${file.categories.sumOf { it.templates.size }}, pins=$pinCount")
         return ImportPreview(
             categoryCount = file.categories.size,
             templateCount = file.categories.sumOf { it.templates.size },
-            pinCount = file.categories.sumOf { it.pins.size }
+            pinCount = pinCount
         )
     }
 
@@ -112,20 +120,21 @@ object PinImporter {
         // 第一步：收集所有需要解压的媒体条目
         val mediaEntries = mutableSetOf<String>()
         val avatarEntries = mutableSetOf<String>()
-        for (cat in file.categories) {
-            for (pin in cat.pins) {
-                pin.avatarEntry?.let {
-                    mediaEntries.add(it)
-                    avatarEntries.add(it)
-                }
-                for (fv in pin.values) {
-                    val template = cat.templates.firstOrNull { it.oldId == fv.oldTemplateId }
-                    if (template != null &&
-                        (template.fieldType == FieldType.IMAGE || template.fieldType == FieldType.VIDEO) &&
-                        fv.value.isNotEmpty()
-                    ) {
-                        mediaEntries.add(fv.value)
-                    }
+        // 模板 id 在整份导出里唯一，建全局索引后无分类标记的字段值也能识别出媒体类型
+        val templatesByOldId = file.categories.flatMap { it.templates }.associateBy { it.oldId }
+        val allPins = file.categories.flatMap { it.pins } + file.orphanPins
+        for (pin in allPins) {
+            pin.avatarEntry?.let {
+                mediaEntries.add(it)
+                avatarEntries.add(it)
+            }
+            for (fv in pin.values) {
+                val template = templatesByOldId[fv.oldTemplateId]
+                if (template != null &&
+                    (template.fieldType == FieldType.IMAGE || template.fieldType == FieldType.VIDEO) &&
+                    fv.value.isNotEmpty()
+                ) {
+                    mediaEntries.add(fv.value)
                 }
             }
         }
@@ -135,7 +144,7 @@ object PinImporter {
         val mediaDir = File(context.filesDir, "images").apply { mkdirs() }
         val avatarDir = File(context.filesDir, "avatars").apply { mkdirs() }
 
-        val totalWork = file.categories.size + file.categories.sumOf { it.pins.size } + mediaEntries.size + 1
+        val totalWork = file.categories.size + allPins.size + mediaEntries.size + 1
         var done = 0
 
         val mediaPathMap = extractMedia(
@@ -156,6 +165,10 @@ object PinImporter {
                 val pinRepo = PinRepository(database.pinStore())
                 val valueRepo = FieldValueRepository(database.fieldValueStore())
 
+            // 全局 id 映射：无分类的标记也要把字段值挂到正确的新模板上
+            val globalTemplateIdMap = mutableMapOf<Long, Long>()
+            val globalTemplateTypeMap = mutableMapOf<Long, FieldType>()
+
             var existingCategories = categoryRepo.getAllCategories().first()
             var newCategoryCount = 0
             var newTemplateCount = 0
@@ -163,10 +176,71 @@ object PinImporter {
             var mediaCount = 0
             var droppedValues = 0
 
+            suspend fun insertPinWithValues(
+                pinData: PinData,
+                categoryId: Long?,
+                templateIdMap: Map<Long, Long>,
+                templateTypeMap: Map<Long, FieldType>
+            ) {
+                Log.d(TAG, "import pin: ${pinData.title}")
+                var avatarPath: String? = null
+                if (pinData.avatarEntry != null) {
+                    avatarPath = mediaPathMap[pinData.avatarEntry]
+                    if (avatarPath != null) mediaCount++
+                }
+
+                val newPinId = pinRepo.insertPin(
+                    Pin(
+                        latitude = pinData.latitude,
+                        longitude = pinData.longitude,
+                        title = pinData.title,
+                        description = pinData.description,
+                        categoryId = categoryId,
+                        avatarPath = avatarPath,
+                        address = pinData.address,
+                        isFavorite = pinData.isFavorite,
+                        avatarScale = pinData.avatarScale,
+                        avatarOffsetX = pinData.avatarOffsetX,
+                        avatarOffsetY = pinData.avatarOffsetY,
+                        createdAt = pinData.createdAt,
+                        updatedAt = pinData.updatedAt
+                    )
+                )
+                newPinCount++
+
+                for (fvData in pinData.values) {
+                    val newTid = templateIdMap[fvData.oldTemplateId]
+                    if (newTid == null) {
+                        droppedValues++
+                        continue
+                    }
+                    val ftType = templateTypeMap[newTid]
+                    var value = fvData.value
+                    if (ftType == FieldType.IMAGE || ftType == FieldType.VIDEO) {
+                        val newPath = mediaPathMap[fvData.value]
+                        if (newPath != null) {
+                            value = newPath
+                            mediaCount++
+                        }
+                    }
+                    valueRepo.insertFieldValue(
+                        FieldValue(
+                            pinId = newPinId,
+                            fieldTemplateId = newTid,
+                            value = value,
+                            mediaScale = fvData.mediaScale,
+                            mediaOffsetX = fvData.mediaOffsetX,
+                            mediaOffsetY = fvData.mediaOffsetY
+                        )
+                    )
+                }
+            }
+
             for (catData in file.categories) {
                 Log.d(TAG, "import category: ${catData.name}")
                 // 分类：按名称合并
                 var category = existingCategories.firstOrNull { it.name == catData.name }
+                val isNewCategory = category == null
                 if (category == null) {
                     val newId = categoryRepo.insertCategory(
                         Category(
@@ -195,13 +269,14 @@ object PinImporter {
                 for (templateData in catData.templates) {
                     var template = existingTemplates.firstOrNull { it.fieldName == templateData.fieldName }
                     if (template == null) {
-                        val nextOrder = templateRepo.nextSortOrder(category.id)
+                        // 新建分类沿用文件里的顺序；已有分类只追加，避免打乱用户当前排序
+                        val order = if (isNewCategory) templateData.sortOrder else templateRepo.nextSortOrder(category.id)
                         val newId = templateRepo.insertFieldTemplate(
                             FieldTemplate(
                                 categoryId = category.id,
                                 fieldName = templateData.fieldName,
                                 fieldType = templateData.fieldType,
-                                sortOrder = nextOrder
+                                sortOrder = order
                             )
                         )
                         template = FieldTemplate(
@@ -209,7 +284,7 @@ object PinImporter {
                             categoryId = category.id,
                             fieldName = templateData.fieldName,
                             fieldType = templateData.fieldType,
-                            sortOrder = nextOrder
+                            sortOrder = order
                         )
                         existingTemplates = existingTemplates + template
                         newTemplateCount++
@@ -217,58 +292,22 @@ object PinImporter {
                     oldTemplateIdMap[templateData.oldId] = template.id
                 }
                 val templateTypeMap = existingTemplates.associate { it.id to it.fieldType }
+                globalTemplateIdMap.putAll(oldTemplateIdMap)
+                globalTemplateTypeMap.putAll(templateTypeMap)
 
                 // 标记：全部新增
                 for (pinData in catData.pins) {
-                    Log.d(TAG, "import pin: ${pinData.title}")
-                    var avatarPath: String? = null
-                    if (pinData.avatarEntry != null) {
-                        avatarPath = mediaPathMap[pinData.avatarEntry]
-                        if (avatarPath != null) mediaCount++
-                    }
-
-                    val newPinId = pinRepo.insertPin(
-                        Pin(
-                            latitude = pinData.latitude,
-                            longitude = pinData.longitude,
-                            title = pinData.title,
-                            description = pinData.description,
-                            categoryId = category.id,
-                            avatarPath = avatarPath,
-                            address = pinData.address,
-                            isFavorite = pinData.isFavorite,
-                            createdAt = pinData.createdAt,
-                            updatedAt = pinData.updatedAt
-                        )
-                    )
-                    newPinCount++
-
-                    for (fvData in pinData.values) {
-                        val newTid = oldTemplateIdMap[fvData.oldTemplateId]
-                        if (newTid == null) {
-                            droppedValues++
-                            continue
-                        }
-                        val ftType = templateTypeMap[newTid]
-                        var value = fvData.value
-                        if (ftType == FieldType.IMAGE || ftType == FieldType.VIDEO) {
-                            val newPath = mediaPathMap[fvData.value]
-                            if (newPath != null) {
-                                value = newPath
-                                mediaCount++
-                            }
-                        }
-                        valueRepo.insertFieldValue(
-                            FieldValue(
-                                pinId = newPinId,
-                                fieldTemplateId = newTid,
-                                value = value
-                            )
-                        )
-                    }
+                    insertPinWithValues(pinData, category.id, oldTemplateIdMap, templateTypeMap)
                     done++
                     onProgress(done, totalWork)
                 }
+                done++
+                onProgress(done, totalWork)
+            }
+
+            // 无分类的标记（旧数据或手工构造的导出）
+            for (pinData in file.orphanPins) {
+                insertPinWithValues(pinData, null, globalTemplateIdMap, globalTemplateTypeMap)
                 done++
                 onProgress(done, totalWork)
             }
@@ -292,7 +331,7 @@ object PinImporter {
 
     private fun parseFile(context: Context, uri: Uri): ImportFile {
         val json = readDataJson(context, uri) ?: throw IllegalArgumentException("文件中缺少 data.json")
-        val categoriesJson = json.optJSONArray("categories") ?: return ImportFile(emptyList())
+        val categoriesJson = json.optJSONArray("categories") ?: return ImportFile(emptyList(), emptyList())
 
         val categories = mutableListOf<CategoryData>()
         for (i in 0 until categoriesJson.length()) {
@@ -321,31 +360,7 @@ object PinImporter {
             if (pinsJson != null) {
                 for (k in 0 until pinsJson.length()) {
                     val pinJson = pinsJson.optJSONObject(k) ?: continue
-                    val values = mutableListOf<FieldValueData>()
-                    val valuesJson = pinJson.optJSONArray("fieldValues")
-                    if (valuesJson != null) {
-                        for (v in 0 until valuesJson.length()) {
-                            val fvJson = valuesJson.optJSONObject(v) ?: continue
-                            val oldTid = fvJson.optLong("fieldTemplateId", -1L)
-                            if (oldTid >= 0) {
-                                values.add(FieldValueData(oldTid, fvJson.optNullableString("value") ?: ""))
-                            }
-                        }
-                    }
-                    pins.add(
-                        PinData(
-                            latitude = pinJson.optDouble("latitude", 0.0),
-                            longitude = pinJson.optDouble("longitude", 0.0),
-                            title = pinJson.optString("title", "未命名"),
-                            description = pinJson.optNullableString("description"),
-                            address = pinJson.optNullableString("address"),
-                            avatarEntry = pinJson.optNullableString("avatarFile"),
-                            isFavorite = pinJson.optBoolean("isFavorite", false),
-                            createdAt = pinJson.optLong("createdAt", System.currentTimeMillis()),
-                            updatedAt = pinJson.optLong("updatedAt", System.currentTimeMillis()),
-                            values = values
-                        )
-                    )
+                    pins.add(parsePin(pinJson))
                 }
             }
 
@@ -361,7 +376,52 @@ object PinImporter {
                 )
             )
         }
-        return ImportFile(categories)
+        // 顶层 pins：没有分类的标记，直接在根上写，避免按分类遍历时丢失
+        val orphanPins = mutableListOf<PinData>()
+        json.optJSONArray("pins")?.let { array ->
+            for (i in 0 until array.length()) {
+                array.optJSONObject(i)?.let { orphanPins.add(parsePin(it)) }
+            }
+        }
+        return ImportFile(categories, orphanPins)
+    }
+
+    private fun parsePin(pinJson: JSONObject): PinData {
+        val values = mutableListOf<FieldValueData>()
+        val valuesJson = pinJson.optJSONArray("fieldValues")
+        if (valuesJson != null) {
+            for (v in 0 until valuesJson.length()) {
+                val fvJson = valuesJson.optJSONObject(v) ?: continue
+                val oldTid = fvJson.optLong("fieldTemplateId", -1L)
+                if (oldTid >= 0) {
+                    values.add(
+                        FieldValueData(
+                            oldTemplateId = oldTid,
+                            value = fvJson.optNullableString("value") ?: "",
+                            // 旧版文件没有这些字段，默认为不裁剪
+                            mediaScale = fvJson.optDouble("mediaScale", 1.0).toFloat(),
+                            mediaOffsetX = fvJson.optDouble("mediaOffsetX", 0.0).toFloat(),
+                            mediaOffsetY = fvJson.optDouble("mediaOffsetY", 0.0).toFloat()
+                        )
+                    )
+                }
+            }
+        }
+        return PinData(
+            latitude = pinJson.optDouble("latitude", 0.0),
+            longitude = pinJson.optDouble("longitude", 0.0),
+            title = pinJson.optString("title", "未命名"),
+            description = pinJson.optNullableString("description"),
+            address = pinJson.optNullableString("address"),
+            avatarEntry = pinJson.optNullableString("avatarFile"),
+            isFavorite = pinJson.optBoolean("isFavorite", false),
+            avatarScale = pinJson.optDouble("avatarScale", 1.0).toFloat(),
+            avatarOffsetX = pinJson.optDouble("avatarOffsetX", 0.0).toFloat(),
+            avatarOffsetY = pinJson.optDouble("avatarOffsetY", 0.0).toFloat(),
+            createdAt = pinJson.optLong("createdAt", System.currentTimeMillis()),
+            updatedAt = pinJson.optLong("updatedAt", System.currentTimeMillis()),
+            values = values
+        )
     }
 
     private fun JSONObject.optNullableString(name: String): String? {

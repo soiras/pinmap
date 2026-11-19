@@ -19,6 +19,7 @@ import java.util.zip.ZipOutputStream
 object PinExporter {
 
     private const val COPY_BUFFER_SIZE = 64 * 1024
+    private const val FORMAT_VERSION = 3
     private val COMPRESSED_EXTENSIONS = setOf(
         "jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "m4v",
         "3gp", "avi", "mkv", "webm", "mp3", "aac", "m4a", "flac", "ogg", "opus"
@@ -164,6 +165,9 @@ object PinExporter {
                 fvArray.put(JSONObject().apply {
                     put("fieldTemplateId", fv.fieldTemplateId)
                     put("value", value)
+                    put("mediaScale", fv.mediaScale.toDouble())
+                    put("mediaOffsetX", fv.mediaOffsetX.toDouble())
+                    put("mediaOffsetY", fv.mediaOffsetY.toDouble())
                 })
             }
             return JSONObject().apply {
@@ -173,6 +177,9 @@ object PinExporter {
                 put("description", pin.description ?: JSONObject.NULL)
                 put("address", pin.address ?: JSONObject.NULL)
                 put("isFavorite", pin.isFavorite)
+                put("avatarScale", pin.avatarScale.toDouble())
+                put("avatarOffsetX", pin.avatarOffsetX.toDouble())
+                put("avatarOffsetY", pin.avatarOffsetY.toDouble())
                 pin.avatarPath?.let { path ->
                     resolveFilePath(path)?.let { put("avatarFile", addFile(it)) }
                 }
@@ -183,7 +190,7 @@ object PinExporter {
         }
 
         val root = JSONObject().apply {
-            put("version", 2)
+            put("version", FORMAT_VERSION)
             put("exportedAt", System.currentTimeMillis())
             val catsArray = JSONArray()
             categories.map { cat ->
@@ -211,6 +218,13 @@ object PinExporter {
                 }
             }.forEach { catsArray.put(it) }
             put("categories", catsArray)
+            // 没有分类的标记单独放在顶层，否则在按分类遍历时会整条丢失
+            val orphanPins = pins.filter { pin -> categories.none { it.id == pin.categoryId } }
+            if (orphanPins.isNotEmpty()) {
+                val orphanArray = JSONArray()
+                orphanPins.forEach { orphanArray.put(pinToJson(it, fieldValues[it.id].orEmpty())) }
+                put("pins", orphanArray)
+            }
         }
 
         // Build ZIP

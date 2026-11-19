@@ -120,6 +120,7 @@ private const val PIN_PAGER_MULTIPLIER = 2001
 private const val PIN_PAGER_INITIAL = 1000
 private const val ZOOM_MIN = 1f
 private const val ZOOM_MAX = 5f
+private const val AVATAR_TEMPLATE_ID = -1L
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -262,21 +263,19 @@ fun PinEditScreen(
         }
     }
 
-    var hasImagePermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
-                else Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        )
+    fun mediaPermissionFor(isVideo: Boolean): String = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (isVideo) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    val imagePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { hasImagePermission = it }
+    fun hasMediaPermission(isVideo: Boolean): Boolean =
+        ContextCompat.checkSelfPermission(context, mediaPermissionFor(isVideo)) == PackageManager.PERMISSION_GRANTED
 
+    var hasImagePermission by remember { mutableStateOf(hasMediaPermission(false)) }
+    var hasVideoPermission by remember { mutableStateOf(hasMediaPermission(true)) }
     var pendingImageTemplateId by remember { mutableStateOf<Long?>(null) }
+    var pendingPickerMime by remember { mutableStateOf<String?>(null) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -291,7 +290,7 @@ fun PinEditScreen(
                                 if (it == "*" || it.length > 4) null else ".$it"
                             } ?: ".jpg"
                         } catch (_: Exception) { ".jpg" }
-                        val dirName = if (tid == -1L) "avatars" else "images"
+                        val dirName = if (tid == AVATAR_TEMPLATE_ID) "avatars" else "images"
                         val fileName = "IMG_${timeStamp}$ext"
                         val destDir = File(context.filesDir, dirName)
                         if (!destDir.exists()) destDir.mkdirs()
@@ -300,7 +299,7 @@ fun PinEditScreen(
                             FileOutputStream(destFile).use { output -> input.copyTo(output) }
                         }
                         val uriStr = Uri.fromFile(destFile).toString()
-                        if (tid == -1L) {
+                        if (tid == AVATAR_TEMPLATE_ID) {
                             avatarDeleted = false
                             editingAvatar = uriStr; markDirty()
                         } else {
@@ -314,6 +313,35 @@ fun PinEditScreen(
                 }
             }
             pendingImageTemplateId = null
+        }
+    }
+
+    val mediaPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            hasImagePermission = hasMediaPermission(false)
+            hasVideoPermission = hasMediaPermission(true)
+            // 授权后自动续上被打断的选择流程
+            pendingPickerMime?.let { imagePickerLauncher.launch(it) }
+        } else {
+            pendingImageTemplateId = null
+            Toast.makeText(context, "需要媒体权限才能选择文件", Toast.LENGTH_SHORT).show()
+        }
+        pendingPickerMime = null
+    }
+
+    /**
+     * 选择图片/视频：已授权直接打开系统选择器，未授权先申请对应类型的媒体权限。
+     */
+    fun openMediaPicker(templateId: Long, mime: String) {
+        pendingImageTemplateId = templateId
+        pendingPickerMime = mime
+        val isVideo = mime.startsWith("video")
+        if (if (isVideo) hasVideoPermission else hasImagePermission) {
+            imagePickerLauncher.launch(mime)
+        } else {
+            mediaPermissionLauncher.launch(mediaPermissionFor(isVideo))
         }
     }
 
@@ -413,7 +441,7 @@ fun PinEditScreen(
                                         if (avatarUri != null) {
                                             viewingAvatar = true
                                         } else {
-                                            pendingImageTemplateId = -1L; imagePickerLauncher.launch("image/*")
+                                            openMediaPicker(AVATAR_TEMPLATE_ID, "image/*")
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -679,11 +707,7 @@ fun PinEditScreen(
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        if (hasImagePermission) {
-                                            pendingImageTemplateId = template.id; imagePickerLauncher.launch("image/*")
-                                        } else {
-                                            imagePermissionLauncher.launch(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE)
-                                        }
+                                        openMediaPicker(template.id, "image/*")
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text(if (images.isEmpty()) "选择图片" else "添加图片") }
@@ -720,11 +744,7 @@ fun PinEditScreen(
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        if (hasImagePermission) {
-                                            pendingImageTemplateId = template.id; imagePickerLauncher.launch("video/*")
-                                        } else {
-                                            imagePermissionLauncher.launch(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE)
-                                        }
+                                        openMediaPicker(template.id, "video/*")
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text(if (videos.isEmpty()) "选择视频" else "添加视频") }
@@ -1090,7 +1110,7 @@ fun PinEditScreen(
             },
             onPickNew = {
                 adjustingAvatar = false
-                pendingImageTemplateId = -1L; imagePickerLauncher.launch("image/*")
+                openMediaPicker(AVATAR_TEMPLATE_ID, "image/*")
             }
         )
     }

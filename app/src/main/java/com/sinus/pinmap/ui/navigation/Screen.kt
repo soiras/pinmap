@@ -16,3 +16,10 @@ sealed class Screen(val mRoute: String) {
         fun createRoute(categoryId: Long) = "field_templates/$categoryId"
     }
 }
+
+/** 主框架（Tab 容器）所在的占位路由，子页面都盖在它之上 */
+const val ROUTE_TAB_ROOT = "empty"
+
+/** PinEdit 返回时写入上一页 savedStateHandle 的地图落点 key */
+const val KEY_FOCUS_LAT = "focusLat"
+const val KEY_FOCUS_LNG = "focusLng"
