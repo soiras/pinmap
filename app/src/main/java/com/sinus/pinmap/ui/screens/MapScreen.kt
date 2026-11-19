@@ -390,7 +390,6 @@ fun MapScreen(
                     anchor = marker.position,
                     pins = filteredPins,
                     zIndexByPin = markerZIndex,
-                    highlightedPinId = highlightedPinId,
                     widthPx = MARKER_SIZE_PX * density,
                     heightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
                 ) ?: clickedId
@@ -838,26 +837,11 @@ fun MapScreen(
             // 移除已删除的标记
             oldIds.subtract(currentIds).forEach { id ->
                 markerMap[id]?.remove()
-                newZIndex.remove(id)
             }
-            // 添加新标记，高亮变化时重建所有（无 aMap.clear 不闪）
-            val newMap = markerMap.toMutableMap()
-            filteredPins.forEach { pin ->
-                val oldMarker = markerMap[pin.id]
-                val prevPin = renderedPins[pin.id]
-                val pinChanged = prevPin == null || pin.title != prevPin.title ||
-                    pin.avatarPath != prevPin.avatarPath ||
-                    pin.categoryId != prevPin.categoryId ||
-                    pin.latitude != prevPin.latitude ||
-                    pin.longitude != prevPin.longitude
-                if (oldMarker != null && !pinChanged && highlightedPinId != pin.id && previousHighlightedPinId != pin.id) {
-                    // 标记未变化，跳过
-                    newMap[pin.id] = oldMarker
-                } else {
-                    // 需要创建新标记或更新旧标记
-                    oldMarker?.remove()
-                    val color = categories.find { it.id == pin.categoryId }?.color ?: DEFAULT_PIN_COLOR
-                    val label = pin.title.take(1)
+            // 每个 pin 只建一个标记，之后原地改位置和图标，不删了重建——绘制顺序才不会因为重建而跳动
+            fun buildMarkerIcon(pin: Pin): com.amap.api.maps.model.BitmapDescriptor {
+                val color = categories.find { it.id == pin.categoryId }?.color ?: DEFAULT_PIN_COLOR
+                val label = pin.title.take(1)
 
                 val avatarBitmap = pin.avatarPath?.let { path ->
                     try {
@@ -942,26 +926,41 @@ fun MapScreen(
                     paint.style = Paint.Style.FILL
                 }
 
-                val markerIcon = BitmapDescriptorFactory.fromBitmap(bubble)
-                // 层级只在标记首次出现时分配，之后重建一律沿用，叠放次序不会因为重建而跳动；
-                // 只有被搜索高亮的标记临时提到最上面，取消高亮后回到原来的层级。
-                val baseZIndex = markerZIndex[pin.id] ?: markerZCounter.incrementAndGet().toFloat()
-                val zIndex = if (pin.id == highlightedPinId) {
-                    markerZCounter.incrementAndGet().toFloat()
-                } else {
-                    baseZIndex
-                }
-                val markerOptions = MarkerOptions()
-                    .position(LatLng(pin.latitude, pin.longitude))
-                    .icon(markerIcon)
-                    .snippet(pin.id.toString())
-                    .draggable(true)
-                    .anchor(0.5f, 1.0f)
-                    .zIndex(zIndex)
+                return BitmapDescriptorFactory.fromBitmap(bubble)
+            }
 
-                val marker = aMap.addMarker(markerOptions)
-                marker?.let { newMap[pin.id] = it }
-                newZIndex[pin.id] = baseZIndex
+            val newMap = markerMap.toMutableMap()
+            filteredPins.forEach { pin ->
+                val oldMarker = markerMap[pin.id]
+                val prevPin = renderedPins[pin.id]
+                val pinChanged = prevPin == null || prevPin.title != pin.title ||
+                    prevPin.avatarPath != pin.avatarPath ||
+                    prevPin.categoryId != pin.categoryId ||
+                    prevPin.latitude != pin.latitude ||
+                    prevPin.longitude != pin.longitude
+                val highlightChanged = pin.id == highlightedPinId || pin.id == previousHighlightedPinId
+                if (oldMarker != null) {
+                    if (pinChanged || highlightChanged) {
+                        oldMarker.setIcon(buildMarkerIcon(pin))
+                        oldMarker.position = LatLng(pin.latitude, pin.longitude)
+                    }
+                    newMap[pin.id] = oldMarker
+                } else {
+                    // 层级只在标记首次出现时分配，之后（过滤、重建、重新出现）都沿用
+                    val zIndex = markerZIndex[pin.id] ?: markerZCounter.incrementAndGet().toFloat()
+                    val marker = aMap.addMarker(
+                        MarkerOptions()
+                            .position(LatLng(pin.latitude, pin.longitude))
+                            .icon(buildMarkerIcon(pin))
+                            .snippet(pin.id.toString())
+                            .draggable(true)
+                            .anchor(0.5f, 1.0f)
+                            .zIndex(zIndex)
+                    )
+                    marker?.let {
+                        newMap[pin.id] = it
+                        newZIndex[pin.id] = zIndex
+                    }
                 }
             }
             markerMap = newMap
@@ -1045,23 +1044,18 @@ private fun topMostOverlappingPinId(
     anchor: LatLng,
     pins: List<Pin>,
     zIndexByPin: Map<Long, Float>,
-    highlightedPinId: Long?,
     widthPx: Float,
     heightPx: Float
 ): Long? = try {
     val base = aMap.projection.toScreenLocation(anchor)
     var bestId: Long? = null
     var bestZ = Float.NEGATIVE_INFINITY
-    var highlightedHit = false
     pins.forEach { pin ->
         val p = aMap.projection.toScreenLocation(LatLng(pin.latitude, pin.longitude))
         // 图标以 (x, y) 为底边中点，向上 heightPx、左右各 widthPx / 2 展开；两个矩形相交即视为重叠
         val overlaps = kotlin.math.abs(p.x - base.x) <= widthPx &&
             kotlin.math.abs(p.y - base.y) <= heightPx
         if (overlaps) {
-            if (pin.id == highlightedPinId) {
-                highlightedHit = true
-            }
             val z = zIndexByPin[pin.id] ?: 0f
             if (z > bestZ) {
                 bestZ = z
@@ -1069,7 +1063,7 @@ private fun topMostOverlappingPinId(
             }
         }
     }
-    if (highlightedHit) highlightedPinId else bestId
+    bestId
 } catch (_: Exception) {
     null
 }
