@@ -22,7 +22,7 @@ fun SubPagesNavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = ROUTE_TAB_ROOT,
+        startDestination = "empty",
         modifier = modifier,
         enterTransition = {
             slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, animationSpec = tween(300))
@@ -37,7 +37,7 @@ fun SubPagesNavGraph(
             slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, animationSpec = tween(300))
         }
     ) {
-        composable(ROUTE_TAB_ROOT) { Box(Modifier) }
+        composable("empty") { Box(Modifier) }
 
         composable(
             route = Screen.PinEdit.mRoute,
@@ -56,8 +56,8 @@ fun SubPagesNavGraph(
                 lng = lng,
                 onBack = { savedLat, savedLng ->
                     navController.previousBackStackEntry?.savedStateHandle?.apply {
-                        set(KEY_FOCUS_LAT, savedLat)
-                        set(KEY_FOCUS_LNG, savedLng)
+                        set("focusLat", savedLat)
+                        set("focusLng", savedLng)
                     }
                     navController.popBackStack()
                 }
