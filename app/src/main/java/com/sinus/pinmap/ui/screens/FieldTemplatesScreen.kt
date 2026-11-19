@@ -365,7 +365,7 @@ fun FieldTemplatesScreen(
                                 if (row.size == 1) {
                                     val template = row.first()
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(
