@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.sinus.pinmap.data.entity.MarkKind
 
-val MARK_COLOR_MUST_EAT = Color(0xFFFFC107)
+val MARK_COLOR_MUST_EAT = Color(0xFFFF8F00)
 val MARK_COLOR_WATCHED = Color(0xFF1E88E5)
 val MARK_COLOR_NONE = Color(0xFF9E9E9E)
 
