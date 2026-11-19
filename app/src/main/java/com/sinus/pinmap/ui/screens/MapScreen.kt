@@ -60,6 +60,7 @@ import com.sinus.pinmap.ui.viewmodel.MapViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -118,6 +119,10 @@ fun MapScreen(
             result
         }
     }
+
+    // pinId -> 标记的绘制层级。显式指定才能判断重叠标记里谁画在最上面
+    var markerZIndex by remember { mutableStateOf<Map<Long, Float>>(emptyMap()) }
+    val markerZCounter = remember { AtomicLong(0L) }
 
     // pinId -> 非媒体字段值文本（搜索匹配用）
     var fieldTextByPin by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
@@ -376,24 +381,18 @@ fun MapScreen(
             aMap.setOnMarkerClickListener { marker ->
                 marker.hideInfoWindow()
                 val clickedId = marker.snippet?.toLongOrNull() ?: return@setOnMarkerClickListener false
-                // 高德在标记重叠时会把点击派发给叠在最下面的那个，而搜索结果里被高亮的标记画在最上面，
-                // 于是点击总是落到旁边那个标记上。这里按屏幕坐标判断点击点是否落在高亮标记的范围里，
-                // 命中就转给高亮标记，保证"看到的是谁，点开的就是谁"。
-                val highlightedId = highlightedPinId
-                val pinId = if (highlightedId != null && highlightedId != clickedId) {
-                    val highlightedPin = pins.find { it.id == highlightedId }
-                    val density = context.resources.displayMetrics.density
-                    val markerWidthPx = MARKER_SIZE_PX * density
-                    val markerHeightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
-                    if (highlightedPin != null && isInsideMarkerBounds(
-                            aMap,
-                            marker.position,
-                            LatLng(highlightedPin.latitude, highlightedPin.longitude),
-                            markerWidthPx,
-                            markerHeightPx
-                        )
-                    ) highlightedId else clickedId
-                } else clickedId
+                // 高德在多个标记重叠时，把点击派发给叠在最下面的那个。标记图标是固定像素尺寸、
+                // 不随缩放变小，地图一缩小，屏幕上就会有一团互相压住的标记，点到的往往不是眼睛看到的最上面那个。
+                // 这里在屏幕坐标里找出与它重叠的标记，按绘制层级取最上面的一枚，保证"看到的是谁，点开的就是谁"。
+                val density = context.resources.displayMetrics.density
+                val pinId = topMostOverlappingPinId(
+                    aMap = aMap,
+                    anchor = marker.position,
+                    pins = filteredPins,
+                    zIndexByPin = markerZIndex,
+                    widthPx = MARKER_SIZE_PX * density,
+                    heightPx = (MARKER_SIZE_PX + ARROW_HEIGHT_PX) * density
+                ) ?: clickedId
                 val pin = pins.find { it.id == pinId }
                 if (pin?.avatarPath != null) {
                     viewerPin = pin
@@ -834,9 +833,11 @@ fun MapScreen(
             val currentIds = filteredPins.map { it.id }.toSet()
             val oldIds = markerMap.keys
 
+            val newZIndex = markerZIndex.toMutableMap()
             // 移除已删除的标记
             oldIds.subtract(currentIds).forEach { id ->
                 markerMap[id]?.remove()
+                newZIndex.remove(id)
             }
             // 添加新标记，高亮变化时重建所有（无 aMap.clear 不闪）
             val newMap = markerMap.toMutableMap()
@@ -941,19 +942,23 @@ fun MapScreen(
                 }
 
                 val markerIcon = BitmapDescriptorFactory.fromBitmap(bubble)
+                // 后建后画的层级更高：重建的标记（如刚高亮的）自然压在最上面
+                val zIndex = markerZCounter.incrementAndGet().toFloat()
                 val markerOptions = MarkerOptions()
                     .position(LatLng(pin.latitude, pin.longitude))
                     .icon(markerIcon)
                     .snippet(pin.id.toString())
                     .draggable(true)
                     .anchor(0.5f, 1.0f)
-                    .zIndex(if (pin.id == highlightedPinId) HIGHLIGHT_MARKER_Z_INDEX else DEFAULT_MARKER_Z_INDEX)
+                    .zIndex(zIndex)
 
                 val marker = aMap.addMarker(markerOptions)
                 marker?.let { newMap[pin.id] = it }
+                newZIndex[pin.id] = zIndex
                 }
             }
             markerMap = newMap
+            markerZIndex = newZIndex
             renderedPins = filteredPins.associateBy { it.id }
             previousHighlightedPinId = highlightedPinId
         }
@@ -1023,22 +1028,38 @@ private val SEARCH_ITEM_H_PADDING = 12.dp
 private val SEARCH_ITEM_V_PADDING = 6.dp
 
 /**
- * 判断 [point] 是否落在以 [markerPosition] 为锚点（anchor 0.5, 1.0）的标记图标范围内。
- * 用于解决高德"重叠时点击响应最下层标记"导致点错的问题。
+ * 找出与 [anchor] 处图标在屏幕上重叠、且绘制层级最高的标记 id。
+ *
+ * 高德把重叠标记的点击交给叠在最下面的那枚，标记图标又是固定像素尺寸（不随缩放变小），
+ * 地图缩小后容易叠成一团，所以点开前按 zIndex 纠正一次。
  */
-private fun isInsideMarkerBounds(
+private fun topMostOverlappingPinId(
     aMap: com.amap.api.maps.AMap,
-    point: LatLng,
-    markerPosition: LatLng,
+    anchor: LatLng,
+    pins: List<Pin>,
+    zIndexByPin: Map<Long, Float>,
     widthPx: Float,
     heightPx: Float
-): Boolean = try {
-    val p = aMap.projection.toScreenLocation(point)
-    val m = aMap.projection.toScreenLocation(markerPosition)
-    p.x >= m.x - widthPx / 2f && p.x <= m.x + widthPx / 2f &&
-        p.y >= m.y - heightPx && p.y <= m.y
+): Long? = try {
+    val base = aMap.projection.toScreenLocation(anchor)
+    var bestId: Long? = null
+    var bestZ = Float.NEGATIVE_INFINITY
+    pins.forEach { pin ->
+        val p = aMap.projection.toScreenLocation(LatLng(pin.latitude, pin.longitude))
+        // 图标以 (x, y) 为底边中点，向上 heightPx、左右各 widthPx / 2 展开；两个矩形相交即视为重叠
+        val overlaps = kotlin.math.abs(p.x - base.x) <= widthPx &&
+            kotlin.math.abs(p.y - base.y) <= heightPx
+        if (overlaps) {
+            val z = zIndexByPin[pin.id] ?: 0f
+            if (z > bestZ) {
+                bestZ = z
+                bestId = pin.id
+            }
+        }
+    }
+    bestId
 } catch (_: Exception) {
-    false
+    null
 }
 
 @Composable
@@ -1081,7 +1102,5 @@ private const val TEXT_SIZE_MULTIPLIER = 1.4f
 private const val ARROW_HALF_WIDTH = 10f
 private const val PADDING_4F = 4f
 private const val PADDING_2F = 2f
-private const val HIGHLIGHT_MARKER_Z_INDEX = 990f
-private const val DEFAULT_MARKER_Z_INDEX = 0f
 private const val ZOOM_LOCATION = 15f
 private const val ZOOM_SEARCH = 16f
