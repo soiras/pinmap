@@ -148,6 +148,8 @@ fun CategoryListScreen(
         var editName by remember { mutableStateOf(category.name) }
         var editColor by remember { mutableStateOf(CategoryPresetColors.find { it.hashCode() == category.color } ?: CategoryPresetColors[0]) }
         var editIcon by remember { mutableStateOf(category.icon) }
+        // 当前选中的是颜色还是图片：选颜色只切换高亮，图片保留到保存时才丢弃
+        var useColor by remember { mutableStateOf(category.icon == null) }
         // 本次编辑里复制进来的图片：取消时清掉，保存时只保留最终选中的那张
         val createdIcons = remember { mutableListOf<String>() }
 
@@ -162,6 +164,7 @@ fun CategoryListScreen(
                 if (saved != null) {
                     createdIcons.add(saved)
                     editIcon = saved
+                    useColor = false
                 }
             }
         }
@@ -186,9 +189,12 @@ fun CategoryListScreen(
                     CategoryColorGrid(
                         selectedColor = editColor,
                         iconPath = editIcon,
-                        onColorSelected = { editColor = it },
-                        onPickIcon = { editIconPicker.launch("image/*") },
-                        onClearIcon = { editIcon = null }
+                        isIconSelected = !useColor,
+                        onColorSelected = {
+                            editColor = it
+                            useColor = true
+                        },
+                        onPickIcon = { editIconPicker.launch("image/*") }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -201,9 +207,10 @@ fun CategoryListScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                if (editIcon != category.icon) CategoryIconStore.delete(context, category.icon)
-                                createdIcons.filter { it != editIcon }.forEach { CategoryIconStore.delete(context, it) }
-                                viewModel.updateCategory(category.copy(name = editName, color = editColor.hashCode(), icon = editIcon))
+                                val finalIcon = if (useColor) null else editIcon
+                                if (finalIcon != category.icon) CategoryIconStore.delete(context, category.icon)
+                                createdIcons.filter { it != finalIcon }.forEach { CategoryIconStore.delete(context, it) }
+                                viewModel.updateCategory(category.copy(name = editName, color = editColor.hashCode(), icon = finalIcon))
                                 categoryToEdit = null
                             },
                             enabled = editName.isNotBlank()

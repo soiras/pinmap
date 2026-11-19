@@ -13,13 +13,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -37,26 +35,24 @@ private const val GRID_COLUMNS = 4
 private const val COLOR_OPTION_SIZE_DP = 24
 private const val SELECTED_RING_WIDTH_DP = 3
 private const val EMPTY_TILE_BORDER_WIDTH_DP = 1
-private const val ICON_CLEAR_BADGE_SIZE_DP = 16
-private const val ICON_CLEAR_GLYPH_SIZE_DP = 10
+private const val EMPTY_TILE_BACKGROUND_ALPHA = 0.06f
 
 /**
  * 分类编辑用的颜色网格：3 行 4 列，最后一格是「选择图片」入口。
  *
- * 颜色与图片互斥：选了图片时高亮框落在图片格上，颜色格不高亮；
- * 重新点任一颜色会清除图片并把高亮还给颜色。
+ * 颜色与图片互斥：当前选中的是图片时高亮框落在图片格上，否则落在颜色格上。
  */
 @Composable
 fun CategoryColorGrid(
     selectedColor: Color,
     iconPath: String?,
+    isIconSelected: Boolean,
     onColorSelected: (Color) -> Unit,
-    onPickIcon: () -> Unit,
-    onClearIcon: () -> Unit
+    onPickIcon: () -> Unit
 ) {
     // 最后一格替换成图片入口，网格仍是 4x3
 
-    val iconSelected = !iconPath.isNullOrBlank()
+    val hasIcon = !iconPath.isNullOrBlank()
     val colorCells = CategoryPresetColors.dropLast(1)
     val cells: List<Color?> = colorCells + listOf(null)
     Column {
@@ -69,21 +65,15 @@ fun CategoryColorGrid(
                     if (color == null) {
                         IconOption(
                             iconPath = iconPath,
-                            isSelected = iconSelected,
+                            isSelected = isIconSelected,
                             onClick = onPickIcon,
-                            onClear = onClearIcon,
                             modifier = Modifier.weight(1f)
                         )
                     } else {
                         ColorOption(
                             color = color,
-                            isSelected = !iconSelected && color == selectedColor,
-                            onClick = {
-                                if (iconSelected) {
-                                    onClearIcon()
-                                }
-                                onColorSelected(color)
-                            },
+                            isSelected = !isIconSelected && color == selectedColor,
+                            onClick = { onColorSelected(color) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -134,14 +124,13 @@ private fun ColorOption(
 }
 
 /**
- * 图片选项：未选图片时是一个带描边的空白圆槽，已选图片时显示预览并提供清除。
+ * 图片选项：未选图片时是带淡底的空槽，已选图片时显示预览。
  */
 @Composable
 private fun IconOption(
     iconPath: String?,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val path = iconPath
@@ -149,7 +138,10 @@ private fun IconOption(
         modifier = modifier
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .background(
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = EMPTY_TILE_BACKGROUND_ALPHA),
+                shape = CircleShape
+            )
             .then(
                 if (isSelected) {
                     Modifier.border(
@@ -157,12 +149,14 @@ private fun IconOption(
                         color = MaterialTheme.colorScheme.primary,
                         shape = CircleShape
                     )
-                } else {
+                } else if (path.isNullOrBlank()) {
                     Modifier.border(
                         width = EMPTY_TILE_BORDER_WIDTH_DP.dp,
                         color = MaterialTheme.colorScheme.outlineVariant,
                         shape = CircleShape
                     )
+                } else {
+                    Modifier
                 }
             )
             .clickable(onClick = onClick),
@@ -184,22 +178,6 @@ private fun IconOption(
                     .fillMaxSize()
                     .clip(CircleShape)
             )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(2.dp)
-                    .size(ICON_CLEAR_BADGE_SIZE_DP.dp)
-                    .background(MaterialTheme.colorScheme.error, CircleShape)
-                    .clickable(onClick = onClear),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "清除图片",
-                    tint = Color.White,
-                    modifier = Modifier.size(ICON_CLEAR_GLYPH_SIZE_DP.dp)
-                )
-            }
         }
     }
 }

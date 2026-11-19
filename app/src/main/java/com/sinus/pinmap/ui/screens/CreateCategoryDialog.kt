@@ -40,6 +40,8 @@ fun CreateCategoryDialog(
     var name by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(CategoryPresetColors[0]) }
     var iconPath by remember { mutableStateOf<String?>(null) }
+    // 当前选中的是颜色还是图片：选颜色只是把高亮切回颜色，图片预览保留到保存时才丢弃
+    var useColor by remember { mutableStateOf(true) }
     val context = LocalContext.current
     // 本次弹窗里复制进来的图片：取消时统一清掉，避免留下孤儿文件
 
@@ -56,6 +58,7 @@ fun CreateCategoryDialog(
             if (saved != null) {
                 createdIcons.add(saved)
                 iconPath = saved
+                useColor = false
             }
         }
     }
@@ -103,9 +106,12 @@ fun CreateCategoryDialog(
                 CategoryColorGrid(
                     selectedColor = selectedColor,
                     iconPath = iconPath,
-                    onColorSelected = { selectedColor = it },
-                    onPickIcon = { iconPicker.launch("image/*") },
-                    onClearIcon = { iconPath = null }
+                    isIconSelected = !useColor,
+                    onColorSelected = {
+                        selectedColor = it
+                        useColor = true
+                    },
+                    onPickIcon = { iconPicker.launch("image/*") }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -127,8 +133,9 @@ fun CreateCategoryDialog(
 
                     Button(
                         onClick = {
-                            createdIcons.filter { it != iconPath }.forEach { CategoryIconStore.delete(context, it) }
-                            onConfirm(name, selectedColor.hashCode(), iconPath)
+                            val finalIcon = if (useColor) null else iconPath
+                            createdIcons.filter { it != finalIcon }.forEach { CategoryIconStore.delete(context, it) }
+                            onConfirm(name, selectedColor.hashCode(), finalIcon)
                         },
                         enabled = name.isNotBlank()
                     ) {
