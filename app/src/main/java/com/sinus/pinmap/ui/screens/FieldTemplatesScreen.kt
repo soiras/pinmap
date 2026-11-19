@@ -108,7 +108,9 @@ fun FieldTemplatesScreen(
         rows = newRows
         var order = 0
         newRows.forEach { row ->
-            val key: Long? = if (row.size <= 1) null else (row.first().rowKey ?: row.first().id)
+            // 行 key 必须指向行内字段的 id；拆出首字段后旧 key 会指到行外，需要重新取
+            val validKey = row.first().rowKey?.takeIf { k -> row.any { it.id == k } }
+            val key: Long? = if (row.size <= 1) null else (validKey ?: row.first().id)
             row.forEach { template ->
                 val updated = template.copy(rowKey = key, sortOrder = order)
                 order++
@@ -125,20 +127,20 @@ fun FieldTemplatesScreen(
         return mutable
     }
 
-    fun splitRow(row: List<FieldTemplate>) {
-        rows = rows.flatMap { r -> if (r === row) r.map { listOf(it) } else listOf(r) }
-        scope.launch {
-            row.forEach { template -> templateRepo.updateFieldTemplate(template.copy(rowKey = null)) }
-            val list = templateRepo.getFieldTemplatesByCategory(categoryId).first()
-            persistRows(groupFieldRows(list))
-        }
-    }
-
     fun unmerge(template: FieldTemplate) {
         rows = rows.flatMap { r ->
             if (r.any { it.id == template.id }) {
                 val rest = r.filter { it.id != template.id }
-                if (rest.isEmpty()) listOf(listOf(template)) else listOf(rest, listOf(template))
+                val released = template.copy(rowKey = null)
+                when {
+                    rest.isEmpty() -> listOf(listOf(released))
+                    rest.size == 1 -> listOf(rest.map { it.copy(rowKey = null) }, listOf(released))
+                    else -> {
+                        // 剩余行继续共用一个 key，且必须仍是该行内字段的 id，避免和拆出的字段撞 key
+                        val restKey = rest.first().rowKey?.takeIf { k -> rest.any { it.id == k } } ?: rest.first().id
+                        listOf(rest.map { it.copy(rowKey = restKey) }, listOf(released))
+                    }
+                }
             } else {
                 listOf(r)
             }
@@ -382,9 +384,6 @@ fun FieldTemplatesScreen(
                                     }
                                 } else {
                                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                            TextButton(onClick = { splitRow(row) }) { Text("拆行") }
-                                        }
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically
