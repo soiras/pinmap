@@ -41,18 +41,31 @@ fun CreateCategoryDialog(
     var selectedColor by remember { mutableStateOf(CategoryPresetColors[0]) }
     var iconPath by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    // 本次弹窗里复制进来的图片：取消时统一清掉，避免留下孤儿文件
+
+    val createdIcons = remember { mutableListOf<String>() }
+
+    fun discardDraft() {
+        createdIcons.forEach { CategoryIconStore.delete(context, it) }
+        createdIcons.clear()
+    }
 
     val iconPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val saved = CategoryIconStore.save(context, uri)
             if (saved != null) {
-                CategoryIconStore.delete(context, iconPath)
+                createdIcons.add(saved)
                 iconPath = saved
             }
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = {
+            discardDraft()
+            onDismiss()
+        }
+    ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -92,10 +105,7 @@ fun CreateCategoryDialog(
                     iconPath = iconPath,
                     onColorSelected = { selectedColor = it },
                     onPickIcon = { iconPicker.launch("image/*") },
-                    onClearIcon = {
-                        CategoryIconStore.delete(context, iconPath)
-                        iconPath = null
-                    }
+                    onClearIcon = { iconPath = null }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -104,14 +114,22 @@ fun CreateCategoryDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = {
+                            discardDraft()
+                            onDismiss()
+                        }
+                    ) {
                         Text("取消")
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
-                        onClick = { onConfirm(name, selectedColor.hashCode(), iconPath) },
+                        onClick = {
+                            createdIcons.filter { it != iconPath }.forEach { CategoryIconStore.delete(context, it) }
+                            onConfirm(name, selectedColor.hashCode(), iconPath)
+                        },
                         enabled = name.isNotBlank()
                     ) {
                         Text("创建")

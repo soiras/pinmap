@@ -35,12 +35,16 @@ import java.io.File
 
 private const val GRID_COLUMNS = 4
 private const val COLOR_OPTION_SIZE_DP = 24
+private const val SELECTED_RING_WIDTH_DP = 3
+private const val EMPTY_TILE_BORDER_WIDTH_DP = 1
 private const val ICON_CLEAR_BADGE_SIZE_DP = 16
 private const val ICON_CLEAR_GLYPH_SIZE_DP = 10
 
 /**
- * 分类编辑用的颜色网格：3 行 4 列，最后一格是「选择图片」入口，
- * 选了图片后该格直接显示图片，右上角可清除。
+ * 分类编辑用的颜色网格：3 行 4 列，最后一格是「选择图片」入口。
+ *
+ * 颜色与图片互斥：选了图片时高亮框落在图片格上，颜色格不高亮；
+ * 重新点任一颜色会清除图片并把高亮还给颜色。
  */
 @Composable
 fun CategoryColorGrid(
@@ -52,6 +56,7 @@ fun CategoryColorGrid(
 ) {
     // 最后一格替换成图片入口，网格仍是 4x3
 
+    val iconSelected = !iconPath.isNullOrBlank()
     val colorCells = CategoryPresetColors.dropLast(1)
     val cells: List<Color?> = colorCells + listOf(null)
     Column {
@@ -64,6 +69,7 @@ fun CategoryColorGrid(
                     if (color == null) {
                         IconOption(
                             iconPath = iconPath,
+                            isSelected = iconSelected,
                             onClick = onPickIcon,
                             onClear = onClearIcon,
                             modifier = Modifier.weight(1f)
@@ -71,8 +77,13 @@ fun CategoryColorGrid(
                     } else {
                         ColorOption(
                             color = color,
-                            isSelected = color == selectedColor,
-                            onClick = { onColorSelected(color) },
+                            isSelected = !iconSelected && color == selectedColor,
+                            onClick = {
+                                if (iconSelected) {
+                                    onClearIcon()
+                                }
+                                onColorSelected(color)
+                            },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -101,7 +112,7 @@ private fun ColorOption(
             .then(
                 if (isSelected) {
                     Modifier.border(
-                        width = 3.dp,
+                        width = SELECTED_RING_WIDTH_DP.dp,
                         color = MaterialTheme.colorScheme.primary,
                         shape = CircleShape
                     )
@@ -123,24 +134,41 @@ private fun ColorOption(
 }
 
 /**
- * 图片选项：未选图片时显示加号，已选图片时显示预览并提供清除。
+ * 图片选项：未选图片时是一个带描边的空白圆槽，已选图片时显示预览并提供清除。
  */
 @Composable
 private fun IconOption(
     iconPath: String?,
+    isSelected: Boolean,
     onClick: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val path = iconPath
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .then(
+                if (isSelected) {
+                    Modifier.border(
+                        width = SELECTED_RING_WIDTH_DP.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape
+                    )
+                } else {
+                    Modifier.border(
+                        width = EMPTY_TILE_BORDER_WIDTH_DP.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = CircleShape
+                    )
+                }
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (iconPath.isNullOrBlank()) {
+        if (path.isNullOrBlank()) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "选择图片",
@@ -149,10 +177,12 @@ private fun IconOption(
             )
         } else {
             AsyncImage(
-                model = categoryIconModel(iconPath),
+                model = categoryIconModel(path),
                 contentDescription = "分类图片",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
             )
             Box(
                 modifier = Modifier

@@ -148,17 +148,30 @@ fun CategoryListScreen(
         var editName by remember { mutableStateOf(category.name) }
         var editColor by remember { mutableStateOf(CategoryPresetColors.find { it.hashCode() == category.color } ?: CategoryPresetColors[0]) }
         var editIcon by remember { mutableStateOf(category.icon) }
+        // 本次编辑里复制进来的图片：取消时清掉，保存时只保留最终选中的那张
+        val createdIcons = remember { mutableListOf<String>() }
+
+        fun discardDraft() {
+            createdIcons.forEach { CategoryIconStore.delete(context, it) }
+            createdIcons.clear()
+        }
+
         val editIconPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
                 val saved = CategoryIconStore.save(context, uri)
                 if (saved != null) {
-                    CategoryIconStore.delete(context, editIcon)
+                    createdIcons.add(saved)
                     editIcon = saved
                 }
             }
         }
 
-        Dialog(onDismissRequest = { categoryToEdit = null }) {
+        Dialog(
+            onDismissRequest = {
+                discardDraft()
+                categoryToEdit = null
+            }
+        ) {
             Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                     Text("编辑分类", style = MaterialTheme.typography.headlineSmall)
@@ -175,18 +188,21 @@ fun CategoryListScreen(
                         iconPath = editIcon,
                         onColorSelected = { editColor = it },
                         onPickIcon = { editIconPicker.launch("image/*") },
-                        onClearIcon = {
-                            CategoryIconStore.delete(context, editIcon)
-                            editIcon = null
-                        }
+                        onClearIcon = { editIcon = null }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { categoryToEdit = null }) { Text("取消") }
+                        TextButton(
+                            onClick = {
+                                discardDraft()
+                                categoryToEdit = null
+                            }
+                        ) { Text("取消") }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
                                 if (editIcon != category.icon) CategoryIconStore.delete(context, category.icon)
+                                createdIcons.filter { it != editIcon }.forEach { CategoryIconStore.delete(context, it) }
                                 viewModel.updateCategory(category.copy(name = editName, color = editColor.hashCode(), icon = editIcon))
                                 categoryToEdit = null
                             },
