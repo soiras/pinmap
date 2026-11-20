@@ -41,7 +41,6 @@ import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.MAX_FIELDS_PER_ROW
 import com.sinus.pinmap.ui.groupFieldRows
-import com.sinus.pinmap.ui.hasFullRowField
 import com.sinus.pinmap.ui.rowGroupKey
 import com.sinus.pinmap.ui.utils.PinExporter
 import kotlin.math.abs
@@ -128,9 +127,11 @@ fun FieldTemplatesScreen(
     }
 
     fun unmerge(template: FieldTemplate) {
+        var siblings: List<Long> = emptyList()
         rows = rows.flatMap { r ->
             if (r.any { it.id == template.id }) {
                 val rest = r.filter { it.id != template.id }
+                siblings = rest.map { it.id }
                 val released = template.copy(rowKey = null)
                 when {
                     rest.isEmpty() -> listOf(listOf(released))
@@ -148,7 +149,12 @@ fun FieldTemplatesScreen(
         scope.launch {
             templateRepo.updateFieldTemplate(template.copy(rowKey = null))
             val list = templateRepo.getFieldTemplatesByCategory(categoryId).first()
-            persistRows(groupFieldRows(list))
+            // 剩余行若还以被拆字段的 id 作 rowKey，直接重新分组会和单独成行的它撞 key、又并回去；
+            // 所以先排除被拆字段分组，再把拆出的字段紧跟在原行后面，持久化时由 persistRows 重选行 key
+            val restRows = groupFieldRows(list.filter { it.id != template.id }).toMutableList()
+            val insertAt = restRows.indexOfFirst { row -> row.any { it.id in siblings } }
+            restRows.add(if (insertAt >= 0) insertAt + 1 else restRows.size, listOf(template.copy(rowKey = null)))
+            persistRows(restRows)
         }
     }
 
@@ -220,7 +226,6 @@ fun FieldTemplatesScreen(
             return
         }
         when {
-            dragged.hasFullRowField() || target.hasFullRowField() -> toast("图片/视频字段需要独占一行")
             target.size >= MAX_FIELDS_PER_ROW -> toast("一行最多 $MAX_FIELDS_PER_ROW 个字段")
             else -> mergeIntoRow(current, fromIndex, targetIndex)
         }
@@ -298,9 +303,9 @@ fun FieldTemplatesScreen(
                             val inMergeBand = hovered && targetRect != null &&
                                 abs(centerOffset) <= targetRect.height * MERGE_BAND_RATIO
                             val insertBefore = hovered && !inMergeBand && centerOffset < 0
-                            // 整行拖动时任何落点都合法；单字段拖进满行或含媒体字段的行才提示不可合并
+                            // 整行拖动时任何落点都合法；单字段拖进满行才提示不可合并
                             val hoverInvalid = inMergeBand && draggedRow != null && draggedRow.size == 1 &&
-                                (row.hasFullRowField() || draggedRow.hasFullRowField() || row.size >= MAX_FIELDS_PER_ROW)
+                                row.size >= MAX_FIELDS_PER_ROW
                             val insertLineColor = MaterialTheme.colorScheme.secondary
                             Card(
                                 modifier = Modifier
