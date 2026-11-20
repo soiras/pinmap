@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -17,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -249,8 +247,6 @@ fun MapScreen(
     var circleCenterMarker by remember { mutableStateOf<Marker?>(null) }
     var renderedDim by remember { mutableStateOf<Map<Long, Boolean>>(emptyMap()) }
 
-    var sheetExpanded by remember { mutableStateOf(false) }
-    var sheetDrag by remember { mutableStateOf(0f) }
     var showCategoryFilter by remember { mutableStateOf(false) }
 
     val circleCenterValue = circleCenter
@@ -277,12 +273,8 @@ fun MapScreen(
             aiResults.isNotEmpty() || searchResults.isNotEmpty() || poiResults.isNotEmpty())
     val sheetMode = when {
         viewerPin != null -> MapSheetMode.Detail
-        searchActive -> MapSheetMode.Search
         circleCenter != null -> MapSheetMode.Circle
-        else -> MapSheetMode.Browse
-    }
-    LaunchedEffect(sheetMode) {
-        sheetExpanded = sheetMode != MapSheetMode.Browse
+        else -> MapSheetMode.Hidden
     }
     var poiHighlightLat by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightLng by remember { mutableDoubleStateOf(0.0) }
@@ -408,7 +400,10 @@ fun MapScreen(
             // 设置地图点击事件（用于取消选择）
             aMap.setOnMapClickListener { latLng ->
                 viewModel.clearSelectedPin()
-                viewerPin = null
+                if (viewerPin != null) {
+                    viewerPin = null
+                    return@setOnMapClickListener
+                }
                 if (searchQuery.isNotBlank()) {
                     cancelAiSearch()
                     searchQuery = ""
@@ -506,413 +501,201 @@ fun MapScreen(
             })
         }
 
-        // 顶部搜索栏
-        Card(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            shape = RoundedCornerShape(28.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { newValue: String ->
-                        searchQuery = newValue
-                        showSearchResults = newValue.isNotBlank()
-                        if (newValue.isBlank()) {
-                            cancelAiSearch()
-                        } else {
-                            viewerPin = null
-                            circleCenter = null
-                        }
-                    },
-                    placeholder = { Text("搜索标记...") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(searchFocusRequester),
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onSearch = {
-                            if (searchQuery.isNotBlank()) {
-                                showSearchResults = true
-                            }
-                        }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
-                    )
-                )
-
-                if (searchQuery.isNotBlank()) {
-                    IconButton(
-                        onClick = {
-                            cancelAiSearch()
-                            searchQuery = ""
-                            showSearchResults = false
-                        }
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "清除搜索")
-                    }
-                }
-
-                if (searchQuery.isNotBlank() && AppSettings.isAiSearchEnabled()) {
-                    IconButton(
-                        onClick = {
-                            aiQuery = searchQuery
-                            aiSearchJob = scope.launch {
-                                isAiSearching = true
-                                aiSearchError = null
-                                showSearchResults = true
-                                try {
-                                    // 加载动态字段：全部字段模板 + 每个 pin 的字段值
-                                    val allTemplates = fieldTemplateRepository.getAllFieldTemplates().first()
-                                    val templatesById = allTemplates.associateBy { it.id }
-                                    val fieldValuesByPin = pins.associate { pin ->
-                                        pin.id to fieldValueRepository.getFieldValuesByPin(pin.id).first()
-                                    }
-                                    val result = AiSearchClient.search(
-                                        query = searchQuery,
-                                        pins = pins,
-                                        categories = categories,
-                                        fieldValuesByPin = fieldValuesByPin,
-                                        templatesById = templatesById
-                                    )
-                                    val idSet = result.pinIds.toSet()
-                                    aiResults = pins.filter { it.id in idSet }
-                                        .sortedBy { result.pinIds.indexOf(it.id) }
-                                } catch (e: Exception) {
-                                    if (e is kotlinx.coroutines.CancellationException) throw e
-                                    aiSearchError = "AI 搜索失败：${e.message}"
-                                    aiResults = emptyList()
-                                }
-                                isAiSearching = false
-                            }
-                        },
-                        enabled = !isAiSearching
-                    ) {
-                        if (isAiSearching) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(ICON_SIZE_20),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.Star, contentDescription = "AI 搜索")
-                        }
-                    }
-                }
-
-                // 筛选：分类与三态标记
-                Box {
-                    IconButton(onClick = { showCategoryFilter = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = "筛选")
-                    }
-                    DropdownMenu(
-                        expanded = showCategoryFilter,
-                        onDismissRequest = { showCategoryFilter = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("全部") },
-                            onClick = {
-                                selectedCategoryId = null
-                                markFilter = null
-                                showCategoryFilter = false
-                            },
-                            leadingIcon = if (selectedCategoryId == null && markFilter == null) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null
-                        )
-                        MarkKind.entries.filter { it != MarkKind.NONE }.forEach { kind ->
-                            DropdownMenuItem(
-                                text = { Text(kind.label) },
-                                onClick = {
-                                    markFilter = if (markFilter == kind) null else kind
-                                    showCategoryFilter = false
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        kind.icon,
-                                        contentDescription = null,
-                                        tint = kind.color
-                                    )
-                                },
-                                trailingIcon = if (markFilter == kind) {
-                                    { Icon(Icons.Default.Check, contentDescription = null) }
-                                } else null
-                            )
-                        }
-                        categories.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category.name) },
-                                onClick = {
-                                    selectedCategoryId = category.id
-                                    showCategoryFilter = false
-                                },
-                                leadingIcon = {
-                                    CategoryBadge(
-                                        color = category.color,
-                                        iconPath = category.icon,
-                                        size = 12.dp
-                                    )
-                                },
-                                trailingIcon = if (selectedCategoryId == category.id) {
-                                    { Icon(Icons.Default.Check, contentDescription = null) }
-                                } else null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 底部卡片：列表 / 搜索结果 / 圈选结果 / 标记详情
         val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-        val sheetExpandedHeight = (screenHeight * 0.55f).coerceIn(320.dp, 560.dp)
-        val sheetHeight by animateDpAsState(
-            targetValue = if (sheetExpanded) sheetExpandedHeight else SHEET_PEEK_HEIGHT,
-            label = "mapSheet"
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .height(sheetHeight)
-                .clip(RoundedCornerShape(topStart = SHEET_CORNER_RADIUS, topEnd = SHEET_CORNER_RADIUS))
-                .background(MaterialTheme.colorScheme.surface)
-        ) {
-            // 拖动把手
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragStart = { sheetDrag = 0f },
-                            onDragEnd = {
-                                val threshold = 24.dp.toPx()
-                                if (sheetDrag < -threshold) {
-                                    sheetExpanded = true
-                                } else if (sheetDrag > threshold) {
-                                    sheetExpanded = false
-                                }
-                            },
-                            onVerticalDrag = { _, delta -> sheetDrag += delta }
-                        )
-                    }
-                    .padding(top = 8.dp, bottom = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 36.dp, height = 4.dp)
-                        .background(
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            RoundedCornerShape(2.dp)
-                        )
-                )
-            }
+        val sheetHeight = (screenHeight * 0.42f).coerceIn(260.dp, 460.dp)
 
-            // 标题行
-            val headerTitle = when (sheetMode) {
-                MapSheetMode.Browse -> "全部 ${filteredPins.size} 个标记"
-                MapSheetMode.Circle -> "范围内 ${circlePins.size} 个"
-                MapSheetMode.Search -> "搜索结果 ${searchResults.size + aiResults.size + poiResults.size} 个"
-                MapSheetMode.Detail -> viewerPin?.title ?: "标记详情"
-            }
-            val headerHint = when (sheetMode) {
-                MapSheetMode.Browse -> "上拉查看列表，点标记看详情"
-                MapSheetMode.Circle -> "${circleRadiusLabel(circleRadius)} 内，上拉查看列表"
-                MapSheetMode.Search -> if (isAiSearching) "AI 搜索中..." else "点一条结果定位到地图"
-                MapSheetMode.Detail -> viewerPin?.address ?: "点击地图空白处返回"
-            }
-            Row(
+        // 默认态：只保留搜索栏（与搜索结果浮层）
+        if (sheetMode == MapSheetMode.Hidden) {
+            Column(
                 modifier = Modifier
+                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = headerTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
-                    Text(
-                        text = headerHint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                when (sheetMode) {
-                    MapSheetMode.Browse -> IconButton(onClick = { sheetExpanded = !sheetExpanded }) {
-                        Icon(
-                            if (sheetExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                            contentDescription = if (sheetExpanded) "收起" else "展开"
-                        )
-                    }
-                    MapSheetMode.Circle -> IconButton(onClick = { circleCenter = null }) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭圈选")
-                    }
-                    MapSheetMode.Search -> TextButton(
-                        onClick = {
-                            cancelAiSearch()
-                            searchQuery = ""
-                            showSearchResults = false
-                        }
-                    ) {
-                        Text("清除")
-                    }
-                    MapSheetMode.Detail -> TextButton(onClick = { viewerPin = null }) {
-                        Text("返回")
-                    }
-                }
-            }
-
-            // 第二行：圈选半径
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(SHEET_SECOND_ROW_HEIGHT)
-            ) {
-                if (sheetMode == MapSheetMode.Circle) {
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 12.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            "半径",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        CIRCLE_RADIUS_OPTIONS.forEach { radius ->
-                            val selected = circleRadius == radius
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-                                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.clickable { circleRadius = radius }
+
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { newValue: String ->
+                                searchQuery = newValue
+                                showSearchResults = newValue.isNotBlank()
+                                if (newValue.isBlank()) {
+                                    cancelAiSearch()
+                                }
+                            },
+                            placeholder = { Text("搜索标记...") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(searchFocusRequester),
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                onSearch = {
+                                    if (searchQuery.isNotBlank()) {
+                                        showSearchResults = true
+                                    }
+                                }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent
+                            )
+                        )
+
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    cancelAiSearch()
+                                    searchQuery = ""
+                                    showSearchResults = false
+                                }
                             ) {
-                                Text(
-                                    text = circleRadiusLabel(radius),
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                    style = MaterialTheme.typography.labelMedium
+                                Icon(Icons.Default.Close, contentDescription = "清除搜索")
+                            }
+                        }
+
+                        if (searchQuery.isNotBlank() && AppSettings.isAiSearchEnabled()) {
+                            IconButton(
+                                onClick = {
+                                    aiQuery = searchQuery
+                                    aiSearchJob = scope.launch {
+                                        isAiSearching = true
+                                        aiSearchError = null
+                                        showSearchResults = true
+                                        try {
+                                            val allTemplates = fieldTemplateRepository.getAllFieldTemplates().first()
+                                            val templatesById = allTemplates.associateBy { it.id }
+                                            val fieldValuesByPin = pins.associate { pin ->
+                                                pin.id to fieldValueRepository.getFieldValuesByPin(pin.id).first()
+                                            }
+                                            val result = AiSearchClient.search(
+                                                query = searchQuery,
+                                                pins = pins,
+                                                categories = categories,
+                                                fieldValuesByPin = fieldValuesByPin,
+                                                templatesById = templatesById
+                                            )
+                                            val idSet = result.pinIds.toSet()
+                                            aiResults = pins.filter { it.id in idSet }
+                                                .sortedBy { result.pinIds.indexOf(it.id) }
+                                        } catch (e: Exception) {
+                                            if (e is kotlinx.coroutines.CancellationException) throw e
+                                            aiSearchError = "AI 搜索失败：${e.message}"
+                                            aiResults = emptyList()
+                                        }
+                                        isAiSearching = false
+                                    }
+                                },
+                                enabled = !isAiSearching
+                            ) {
+                                if (isAiSearching) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(ICON_SIZE_20),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Star, contentDescription = "AI 搜索")
+                                }
+                            }
+                        }
+
+                        Box {
+                            IconButton(onClick = { showCategoryFilter = true }) {
+                                Icon(Icons.Default.Menu, contentDescription = "筛选")
+                            }
+                            DropdownMenu(
+                                expanded = showCategoryFilter,
+                                onDismissRequest = { showCategoryFilter = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("全部") },
+                                    onClick = {
+                                        selectedCategoryId = null
+                                        markFilter = null
+                                        showCategoryFilter = false
+                                    },
+                                    leadingIcon = if (selectedCategoryId == null && markFilter == null) {
+                                        { Icon(Icons.Default.Check, contentDescription = null) }
+                                    } else null
                                 )
+                                MarkKind.entries.filter { it != MarkKind.NONE }.forEach { kind ->
+                                    DropdownMenuItem(
+                                        text = { Text(kind.label) },
+                                        onClick = {
+                                            markFilter = if (markFilter == kind) null else kind
+                                            showCategoryFilter = false
+                                        },
+                                        leadingIcon = {
+                                            Icon(kind.icon, contentDescription = null, tint = kind.color)
+                                        },
+                                        trailingIcon = if (markFilter == kind) {
+                                            { Icon(Icons.Default.Check, contentDescription = null) }
+                                        } else null
+                                    )
+                                }
+                                categories.forEach { category ->
+                                    DropdownMenuItem(
+                                        text = { Text(category.name) },
+                                        onClick = {
+                                            selectedCategoryId = category.id
+                                            showCategoryFilter = false
+                                        },
+                                        leadingIcon = {
+                                            CategoryBadge(
+                                                color = category.color,
+                                                iconPath = category.icon,
+                                                size = 12.dp
+                                            )
+                                        },
+                                        trailingIcon = if (selectedCategoryId == category.id) {
+                                            { Icon(Icons.Default.Check, contentDescription = null) }
+                                        } else null
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // 内容区
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                when (sheetMode) {
-                    MapSheetMode.Browse -> {
-                        if (filteredPins.isEmpty()) {
-                            SheetEmptyText("当前筛选下没有标记")
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(filteredPins, key = { it.id }) { pin ->
-                                    PinItem(
-                                        pin = pin,
-                                        category = categories.find { it.id == pin.categoryId },
-                                        distanceKm = null,
-                                        onClick = {
-                                            highlightedPinId = pin.id
-                                            sheetExpanded = false
-                                            scope.launch {
-                                                mapHolder._aMap?.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(pin.latitude, pin.longitude),
-                                                        ZOOM_SEARCH
-                                                    )
-                                                )
-                                            }
-                                        },
-                                        onSetMark = { kind ->
-                                            scope.launch {
-                                                pinRepository.updatePin(pin.copy(markKind = kind))
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    MapSheetMode.Circle -> {
-                        if (circlePins.isEmpty()) {
-                            SheetEmptyText("这个范围内还没有标记")
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(circlePins, key = { it.id }) { pin ->
-                                    PinItem(
-                                        pin = pin,
-                                        category = categories.find { it.id == pin.categoryId },
-                                        distanceKm = circleCenterValue?.let {
-                                            haversineDistance(
-                                                it.latitude, it.longitude,
-                                                pin.latitude, pin.longitude
-                                            ) / 1000f
-                                        },
-                                        onClick = {
-                                            highlightedPinId = pin.id
-                                            sheetExpanded = false
-                                            scope.launch {
-                                                mapHolder._aMap?.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(pin.latitude, pin.longitude),
-                                                        ZOOM_SEARCH
-                                                    )
-                                                )
-                                            }
-                                        },
-                                        onSetMark = { kind ->
-                                            scope.launch {
-                                                pinRepository.updatePin(pin.copy(markKind = kind))
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    MapSheetMode.Search -> {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                // 搜索结果浮层
+                if (searchActive) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = SEARCH_PANEL_MAX_HEIGHT),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
                             if (isAiSearching) {
                                 item {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
@@ -960,7 +743,6 @@ fun MapScreen(
                                                 showSearchResults = false
                                                 keyboardController?.hide()
                                             }
-                                            sheetExpanded = false
                                         }
                                     )
                                 }
@@ -992,7 +774,6 @@ fun MapScreen(
                                                 showSearchResults = false
                                                 keyboardController?.hide()
                                             }
-                                            sheetExpanded = false
                                         }
                                     )
                                 }
@@ -1028,80 +809,210 @@ fun MapScreen(
                                                 showSearchResults = false
                                                 keyboardController?.hide()
                                             }
-                                            sheetExpanded = false
                                         }
                                     )
                                 }
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    MapSheetMode.Detail -> viewerPin?.let { pin ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            if (pin.avatarPath != null) {
-                                Image(
-                                    painter = coil.compose.rememberAsyncImagePainter(
-                                        if (pin.avatarPath.startsWith("/")) pin.avatarPath
-                                        else "file://${pin.avatarPath}"
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp)
-                                        .clip(RoundedCornerShape(16.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 选中状态：圈选结果 / 标记详情，卡片从底部升起并隐藏搜索栏
+        if (sheetMode != MapSheetMode.Hidden) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .height(sheetHeight)
+                    .clip(RoundedCornerShape(topStart = SHEET_CORNER_RADIUS, topEnd = SHEET_CORNER_RADIUS))
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (sheetMode == MapSheetMode.Circle) {
+                                "范围内 ${circlePins.size} 个"
+                            } else {
+                                viewerPin?.title ?: "标记详情"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = if (sheetMode == MapSheetMode.Circle) {
+                                "半径 ${circleRadiusLabel(circleRadius)}，点地图可换圆心"
+                            } else {
+                                viewerPin?.address ?: ""
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (sheetMode == MapSheetMode.Circle) {
+                        IconButton(onClick = { circleCenter = null }) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭圈选")
+                        }
+                    } else {
+                        TextButton(onClick = { viewerPin = null }) {
+                            Text("返回")
+                        }
+                    }
+                }
+
+                if (sheetMode == MapSheetMode.Circle) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "半径",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        CIRCLE_RADIUS_OPTIONS.forEach { radius ->
+                            val selected = circleRadius == radius
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
+                                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable { circleRadius = radius }
                             ) {
-                                CategoryBadge(
-                                    color = categories.find { it.id == pin.categoryId }?.color
-                                        ?: DEFAULT_PIN_COLOR,
-                                    iconPath = categories.find { it.id == pin.categoryId }?.icon,
-                                    size = 20.dp
-                                )
-                                Icon(
-                                    pin.markKind.icon,
-                                    contentDescription = null,
-                                    tint = pin.markKind.color,
-                                    modifier = Modifier.size(16.dp)
-                                )
                                 Text(
-                                    pin.markKind.label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = pin.markKind.color
+                                    text = circleRadiusLabel(radius),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                    style = MaterialTheme.typography.labelMedium
                                 )
-                                categories.find { it.id == pin.categoryId }?.let { category ->
-                                    Text(category.name, style = MaterialTheme.typography.labelMedium)
-                                }
                             }
-                            pin.address?.let {
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    if (sheetMode == MapSheetMode.Circle) {
+                        if (circlePins.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Text(
-                                    it,
+                                    "这个范围内还没有标记",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            pin.description?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = {
-                                    viewerPin = null
-                                    onNavigateToEdit(pin.id)
-                                }) {
-                                    Text("编辑")
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                items(circlePins, key = { it.id }) { pin ->
+                                    PinItem(
+                                        pin = pin,
+                                        category = categories.find { it.id == pin.categoryId },
+                                        distanceKm = circleCenterValue?.let {
+                                            haversineDistance(
+                                                it.latitude, it.longitude,
+                                                pin.latitude, pin.longitude
+                                            ) / 1000f
+                                        },
+                                        onClick = {
+                                            highlightedPinId = pin.id
+                                            viewerPin = pin
+                                        },
+                                        onSetMark = { kind ->
+                                            scope.launch {
+                                                pinRepository.updatePin(pin.copy(markKind = kind))
+                                            }
+                                        }
+                                    )
                                 }
-                                OutlinedButton(onClick = { viewerPin = null }) {
-                                    Text("关闭")
+                            }
+                        }
+                    } else {
+                        viewerPin?.let { pin ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (pin.avatarPath != null) {
+                                    Image(
+                                        painter = coil.compose.rememberAsyncImagePainter(
+                                            if (pin.avatarPath.startsWith("/")) pin.avatarPath
+                                            else "file://${pin.avatarPath}"
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(180.dp)
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CategoryBadge(
+                                        color = categories.find { it.id == pin.categoryId }?.color
+                                            ?: DEFAULT_PIN_COLOR,
+                                        iconPath = categories.find { it.id == pin.categoryId }?.icon,
+                                        size = 20.dp
+                                    )
+                                    Icon(
+                                        pin.markKind.icon,
+                                        contentDescription = null,
+                                        tint = pin.markKind.color,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        pin.markKind.label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = pin.markKind.color
+                                    )
+                                    categories.find { it.id == pin.categoryId }?.let { category ->
+                                        Text(category.name, style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                                pin.address?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                pin.description?.let {
+                                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick = {
+                                        viewerPin = null
+                                        onNavigateToEdit(pin.id)
+                                    }) {
+                                        Text("编辑")
+                                    }
+                                    OutlinedButton(onClick = { circleCenter = null; viewerPin = null }) {
+                                        Text("关闭")
+                                    }
                                 }
                             }
                         }
@@ -1152,7 +1063,10 @@ fun MapScreen(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = sheetHeight + FAB_GAP)
+                .padding(
+                    end = 16.dp,
+                    bottom = if (sheetMode == MapSheetMode.Hidden) 16.dp else sheetHeight + FAB_GAP
+                )
                 .size(FAB_SIZE),
             shape = RoundedCornerShape(FAB_CORNER_RADIUS),
             containerColor = MaterialTheme.colorScheme.surface
@@ -1369,9 +1283,8 @@ private val HIGHLIGHT_RED = 0xFFFF4444.toInt()
 private val MARKER_MUST_EAT_COLOR = 0xFFFF8F00.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_STATE_BORDER_WIDTH_DP = 2f
-private val SHEET_PEEK_HEIGHT = 92.dp
 private val SHEET_CORNER_RADIUS = 24.dp
-private val SHEET_SECOND_ROW_HEIGHT = 36.dp
+private val SEARCH_PANEL_MAX_HEIGHT = 320.dp
 private val FAB_GAP = 12.dp
 private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
@@ -1384,23 +1297,7 @@ private const val CIRCLE_CENTER_Z_INDEX = 997f
 private const val DIM_ALPHA = 90
 private const val FULL_ALPHA = 255
 
-private enum class MapSheetMode { Browse, Circle, Search, Detail }
-
-@Composable
-private fun SheetEmptyText(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
+private enum class MapSheetMode { Hidden, Circle, Detail }
 
 @Composable
 private fun SearchResultItem(
