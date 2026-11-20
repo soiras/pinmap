@@ -6,11 +6,15 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -75,6 +80,8 @@ import com.sinus.pinmap.ui.viewmodel.MapHolderViewModel
 import com.sinus.pinmap.ui.viewmodel.MapViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -884,13 +891,57 @@ fun MapScreen(
 
         // 选中状态：圈选结果 / 标记详情，卡片从底部升起并隐藏搜索栏
         if (sheetMode != MapSheetMode.Hidden) {
+            val sheetHeightPx = with(density) { sheetHeight.toPx() }
+            val dismissThresholdPx = with(density) { DISMISS_DRAG_THRESHOLD.toPx() }
+            var dragOffset by remember(sheetMode) { mutableFloatStateOf(0f) }
+            var dragging by remember(sheetMode) { mutableStateOf(false) }
+            var dismissing by remember(sheetMode) { mutableStateOf(false) }
+            val animatedOffset by animateFloatAsState(
+                targetValue = when {
+                    dragging -> dragOffset
+                    dismissing -> sheetHeightPx
+                    else -> 0f
+                },
+                animationSpec = if (dragging) snap() else tween(durationMillis = 180),
+                label = "sheetOffset"
+            )
+            LaunchedEffect(dismissing) {
+                if (dismissing) {
+                    delay(200)
+                    if (sheetMode == MapSheetMode.Detail) viewerPin = null else circleCenter = null
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .height(sheetHeight)
+                    .offset { IntOffset(0, animatedOffset.roundToInt()) }
                     .clip(RoundedCornerShape(topStart = SHEET_CORNER_RADIUS, topEnd = SHEET_CORNER_RADIUS))
                     .background(MaterialTheme.colorScheme.surface)
+                    .pointerInput(sheetMode) {
+                        detectVerticalDragGestures(
+                            onDragStart = { dragging = true },
+                            onDragEnd = {
+                                dragging = false
+                                if (dragOffset > dismissThresholdPx) {
+                                    dismissing = true
+                                } else {
+                                    dragOffset = 0f
+                                }
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                dragOffset = 0f
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                if (dragAmount > 0 || dragOffset > 0f) {
+                                    change.consume()
+                                    dragOffset = (dragOffset + dragAmount).coerceAtLeast(0f)
+                                }
+                            }
+                        )
+                    }
             ) {
                 Row(
                     modifier = Modifier
@@ -984,7 +1035,11 @@ fun MapScreen(
                                 )
                             }
                         } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 items(circlePins, key = { it.id }) { pin ->
                                     PinItem(
                                         pin = pin,
@@ -1294,6 +1349,7 @@ private val MARKER_MUST_EAT_COLOR = 0xFFFF8F00.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_STATE_BORDER_WIDTH_DP = 2f
 private val SHEET_CORNER_RADIUS = 24.dp
+private val DISMISS_DRAG_THRESHOLD = 72.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private const val SHEET_HEIGHT_FRACTION = 0.42f
 private val FAB_OFFSET = 64.dp
