@@ -960,17 +960,17 @@ fun MapScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = if (sheetMode == MapSheetMode.Circle) {
-                                "半径 ${circleRadiusLabel(circleRadius)}，点地图可换圆心"
-                            } else {
-                                viewerPin?.address ?: ""
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (sheetMode == MapSheetMode.Detail) {
+                            viewerPin?.address?.takeIf { it.isNotBlank() }?.let { address ->
+                                Text(
+                                    text = address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                     if (sheetMode == MapSheetMode.Circle) {
                         IconButton(onClick = { circleCenter = null }) {
