@@ -31,7 +31,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.ContentScale
@@ -322,7 +324,7 @@ fun MapScreen(
 
             // 启用手势
             val uiSettings = aMap.uiSettings
-            uiSettings.isZoomControlsEnabled = true
+            uiSettings.isZoomControlsEnabled = false
             uiSettings.isZoomGesturesEnabled = true
             uiSettings.isScrollGesturesEnabled = true
             uiSettings.isCompassEnabled = true
@@ -620,8 +622,22 @@ fun MapScreen(
                         }
 
                         Box {
+                            val filterIconColor = MaterialTheme.colorScheme.onSurfaceVariant
                             IconButton(onClick = { showCategoryFilter = true }) {
-                                Icon(Icons.Default.Menu, contentDescription = "筛选")
+                                androidx.compose.foundation.Canvas(modifier = Modifier.size(20.dp)) {
+                                    val stroke = 1.8.dp.toPx()
+                                    listOf(1f, 0.72f, 0.44f).forEachIndexed { index, ratio ->
+                                        val y = size.height * (0.22f + index * 0.28f)
+                                        val lineWidth = size.width * ratio
+                                        drawLine(
+                                            color = filterIconColor,
+                                            start = Offset((size.width - lineWidth) / 2f, y),
+                                            end = Offset((size.width + lineWidth) / 2f, y),
+                                            strokeWidth = stroke,
+                                            cap = StrokeCap.Round
+                                        )
+                                    }
+                                }
                             }
                             DropdownMenu(
                                 expanded = showCategoryFilter,
