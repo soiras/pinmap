@@ -271,9 +271,6 @@ fun MapScreen(
             }
     }
     val aiSearchActive = aiQuery.isNotBlank() && searchQuery == aiQuery
-    val searchActive = showSearchResults &&
-        (aiSearchActive || isAiSearching || aiSearchError != null ||
-            aiResults.isNotEmpty() || searchResults.isNotEmpty() || poiResults.isNotEmpty())
     val sheetMode = when {
         viewerPin != null -> MapSheetMode.Detail
         circleCenter != null -> MapSheetMode.Circle
@@ -283,29 +280,6 @@ fun MapScreen(
     var poiHighlightLng by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightMarker by remember { mutableStateOf<com.amap.api.maps.model.Marker?>(null) }
 
-    fun openPinFromSearch(pin: Pin) {
-        highlightedPinId = pin.id
-        mapHolder._aMap?.animateCamera(
-            CameraUpdateFactory.newLatLngZoom(
-                LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
-            )
-        )
-        cancelAiSearch()
-        showSearchResults = false
-        keyboardController?.hide()
-    }
-
-    fun openPoiFromSearch(poi: PoiItemV2) {
-        poiHighlightLat = poi.latLonPoint.latitude
-        poiHighlightLng = poi.latLonPoint.longitude
-        mapHolder._aMap?.animateCamera(
-            CameraUpdateFactory.newLatLngZoom(
-                LatLng(poiHighlightLat, poiHighlightLng), ZOOM_SEARCH
-            )
-        )
-        showSearchResults = false
-        keyboardController?.hide()
-    }
     var isDragging by remember { mutableStateOf(false) }
 
     // 位置权限请求
@@ -550,33 +524,26 @@ fun MapScreen(
                     .align(Alignment.BottomCenter)
                     .padding(start = 16.dp, end = 16.dp, bottom = searchBottom)
             ) {
-                if (searchActive) {
+                // 搜索结果列表：AI 结果只在"查询词与当前输入一致"时显示，避免残留
+                val aiSearchActive = aiQuery.isNotBlank() && searchQuery == aiQuery
+                if (showSearchResults && (aiSearchActive || searchResults.isNotEmpty() || poiResults.isNotEmpty())) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
                         LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = SEARCH_PANEL_MAX_HEIGHT)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = SEARCH_RESULT_MAX_HEIGHT)
                         ) {
                             if (isAiSearching) {
                                 item {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp
-                                        )
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                         Text("AI 搜索中...", style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
@@ -589,8 +556,7 @@ fun MapScreen(
                                         modifier = Modifier.padding(16.dp)
                                     )
                                 }
-                            }
-                            if (aiResults.isNotEmpty()) {
+                            } else if (aiResults.isNotEmpty()) {
                                 item {
                                     Text(
                                         "AI 搜索结果",
@@ -603,16 +569,30 @@ fun MapScreen(
                                     SearchResultItem(
                                         title = pin.title,
                                         subtitle = pin.address,
-                                        onClick = { openPinFromSearch(pin) }
+                                        onClick = {
+                                            scope.launch {
+                                                val aMap = mapHolder._aMap ?: return@launch
+                                                highlightedPinId = pin.id
+                                                aMap.animateCamera(
+                                                    CameraUpdateFactory.newLatLngZoom(
+                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
+                                                    )
+                                                )
+                                                cancelAiSearch()
+                                                showSearchResults = false; keyboardController?.hide()
+                                            }
+                                        }
                                     )
                                 }
-                            }
-                            if (searchResults.isNotEmpty()) {
+                            } else if (searchResults.isNotEmpty()) {
                                 item {
                                     Text(
                                         "标记",
                                         style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -620,7 +600,20 @@ fun MapScreen(
                                     SearchResultItem(
                                         title = pin.title,
                                         subtitle = pin.address,
-                                        onClick = { openPinFromSearch(pin) }
+                                        onClick = {
+                                            scope.launch {
+                                                val aMap = mapHolder._aMap ?: return@launch
+                                                highlightedPinId = pin.id
+                                                aMap.animateCamera(
+                                                    CameraUpdateFactory.newLatLngZoom(
+                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
+                                                    )
+                                                )
+                                                cancelAiSearch()
+                                                showSearchResults = false
+                                                keyboardController?.hide()
+                                            }
+                                        }
                                     )
                                 }
                             }
@@ -629,7 +622,10 @@ fun MapScreen(
                                     Text(
                                         "地址",
                                         style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -637,7 +633,24 @@ fun MapScreen(
                                     SearchResultItem(
                                         title = poi.title,
                                         subtitle = poi.snippet,
-                                        onClick = { openPoiFromSearch(poi) }
+                                        onClick = {
+                                            val aMap = mapHolder._aMap
+                                            if (aMap != null) {
+                                                poiHighlightLat = poi.latLonPoint.latitude
+                                                poiHighlightLng = poi.latLonPoint.longitude
+                                                aMap.animateCamera(
+                                                    CameraUpdateFactory.newLatLngZoom(
+                                                        LatLng(
+                                                            poi.latLonPoint.latitude,
+                                                            poi.latLonPoint.longitude
+                                                        ), ZOOM_SEARCH
+                                                    )
+                                                )
+                                                cancelAiSearch()
+                                                showSearchResults = false
+                                                keyboardController?.hide()
+                                            }
+                                        }
                                     )
                                 }
                             }
@@ -764,21 +777,11 @@ fun MapScreen(
                     shape = RoundedCornerShape(FAB_CORNER_RADIUS),
                     modifier = Modifier.size(FAB_SIZE)
                 ) {
-                    val filterIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    androidx.compose.foundation.Canvas(modifier = Modifier.size(FAB_ICON_SIZE)) {
-                        val stroke = 2.dp.toPx()
-                        listOf(1f, 0.72f, 0.44f).forEachIndexed { index, ratio ->
-                            val y = size.height * (0.26f + index * 0.24f)
-                            val lineWidth = size.width * ratio
-                            drawLine(
-                                color = filterIconColor,
-                                start = Offset((size.width - lineWidth) / 2f, y),
-                                end = Offset((size.width + lineWidth) / 2f, y),
-                                strokeWidth = stroke,
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
+                    Icon(
+                        Icons.Default.Menu,
+                        contentDescription = "筛选分类",
+                        modifier = Modifier.size(FAB_ICON_SIZE)
+                    )
                 }
                 DropdownMenu(
                     expanded = showCategoryFilter,
@@ -821,7 +824,7 @@ fun MapScreen(
                                 CategoryBadge(
                                     color = category.color,
                                     iconPath = category.icon,
-                                    size = 12.dp
+                                    size = 24.dp
                                 )
                             },
                             trailingIcon = if (selectedCategoryId == category.id) {
@@ -1291,7 +1294,7 @@ private val MARKER_MUST_EAT_COLOR = 0xFFFF8F00.toInt()
 private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_STATE_BORDER_WIDTH_DP = 2f
 private val SHEET_CORNER_RADIUS = 24.dp
-private val SEARCH_PANEL_MAX_HEIGHT = 320.dp
+private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private const val SHEET_HEIGHT_FRACTION = 0.42f
 private val FAB_OFFSET = 64.dp
 private val NAV_BAR_GAP = 80.dp
