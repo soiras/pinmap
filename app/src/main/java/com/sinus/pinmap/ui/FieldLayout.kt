@@ -1,6 +1,7 @@
 package com.sinus.pinmap.ui
 
 import com.sinus.pinmap.data.entity.FieldTemplate
+import com.sinus.pinmap.data.entity.FieldType
 
 /** 一行最多容纳的字段数 */
 internal const val MAX_FIELDS_PER_ROW = 3
@@ -20,3 +21,9 @@ internal fun groupFieldRows(templates: List<FieldTemplate>): List<List<FieldTemp
     }
     return groups.values.toList()
 }
+
+/** 图片/视频字段必须独占一行，不允许参与融合。 */
+internal fun FieldTemplate.needsFullRow(): Boolean =
+    fieldType == FieldType.IMAGE || fieldType == FieldType.VIDEO
+
+internal fun List<FieldTemplate>.hasFullRowField(): Boolean = any { it.needsFullRow() }

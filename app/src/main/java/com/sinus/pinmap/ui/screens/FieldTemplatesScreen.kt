@@ -41,6 +41,7 @@ import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.data.repository.PinRepository
 import com.sinus.pinmap.ui.MAX_FIELDS_PER_ROW
 import com.sinus.pinmap.ui.groupFieldRows
+import com.sinus.pinmap.ui.hasFullRowField
 import com.sinus.pinmap.ui.rowGroupKey
 import com.sinus.pinmap.ui.utils.PinExporter
 import kotlin.math.abs
@@ -226,6 +227,7 @@ fun FieldTemplatesScreen(
             return
         }
         when {
+            dragged.hasFullRowField() || target.hasFullRowField() -> toast("图片/视频字段需要独占一行")
             target.size >= MAX_FIELDS_PER_ROW -> toast("一行最多 $MAX_FIELDS_PER_ROW 个字段")
             else -> mergeIntoRow(current, fromIndex, targetIndex)
         }
@@ -303,9 +305,9 @@ fun FieldTemplatesScreen(
                             val inMergeBand = hovered && targetRect != null &&
                                 abs(centerOffset) <= targetRect.height * MERGE_BAND_RATIO
                             val insertBefore = hovered && !inMergeBand && centerOffset < 0
-                            // 整行拖动时任何落点都合法；单字段拖进满行才提示不可合并
+                            // 整行拖动时任何落点都合法；单字段拖进满行或含媒体字段的行才提示不可合并
                             val hoverInvalid = inMergeBand && draggedRow != null && draggedRow.size == 1 &&
-                                row.size >= MAX_FIELDS_PER_ROW
+                                (row.hasFullRowField() || draggedRow.hasFullRowField() || row.size >= MAX_FIELDS_PER_ROW)
                             val insertLineColor = MaterialTheme.colorScheme.secondary
                             Card(
                                 modifier = Modifier
