@@ -8,6 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,6 +48,8 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.Log
 import com.amap.api.maps.model.BitmapDescriptorFactory
+import com.amap.api.maps.model.Circle
+import com.amap.api.maps.model.CircleOptions
 import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
@@ -83,6 +87,9 @@ import com.sinus.pinmap.data.repository.FieldValueRepository
 import com.sinus.pinmap.ui.utils.AiSearchClient
 import com.sinus.pinmap.ui.utils.AppSettings
 import com.sinus.pinmap.ui.utils.AuthState
+import com.sinus.pinmap.ui.utils.CIRCLE_RADIUS_OPTIONS
+import com.sinus.pinmap.ui.utils.circleRadiusLabel
+import com.sinus.pinmap.ui.utils.haversineDistance
 
 /**
  * 地图页面
@@ -229,6 +236,12 @@ fun MapScreen(
     var highlightedPinId by remember { mutableStateOf<Long?>(null) }
     var previousHighlightedPinId by remember { mutableStateOf<Long?>(null) }
     var renderedPins by remember { mutableStateOf<Map<Long, Pin>>(emptyMap()) }
+    // 圈选：单击地图设圆心，范围内标记正常、范围外变淡
+    var circleCenter by remember { mutableStateOf<LatLng?>(null) }
+    var circleRadius by remember { mutableIntStateOf(AppSettings.getCircleRadius()) }
+    var circleOverlay by remember { mutableStateOf<Circle?>(null) }
+    var circleCenterMarker by remember { mutableStateOf<Marker?>(null) }
+    var renderedDim by remember { mutableStateOf<Map<Long, Boolean>>(emptyMap()) }
     var poiHighlightLat by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightLng by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightMarker by remember { mutableStateOf<com.amap.api.maps.model.Marker?>(null) }
@@ -364,8 +377,12 @@ fun MapScreen(
             val aMap = mapHolder._aMap ?: return@LaunchedEffect
 
             // 设置地图点击事件（用于取消选择）
-            aMap.setOnMapClickListener { _ ->
+            aMap.setOnMapClickListener { latLng ->
                 viewModel.clearSelectedPin()
+                if (circleCenter == null) {
+                    circleRadius = AppSettings.getCircleRadius()
+                }
+                circleCenter = latLng
             }
 
             // 设置地图长按事件（用于创建标记）
@@ -397,6 +414,11 @@ fun MapScreen(
                 }
                 override fun onMarkerDrag(marker: com.amap.api.maps.model.Marker?) {}
                 override fun onMarkerDragEnd(marker: com.amap.api.maps.model.Marker?) {
+                    if (marker?.snippet == CIRCLE_CENTER_SNIPPET) {
+                        isDragging = false
+                        circleCenter = marker.position
+                        return
+                    }
                     val id = marker?.snippet?.toLongOrNull() ?: return
                     val pos = marker.position
                     scope.launch {
@@ -588,6 +610,55 @@ fun MapScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 圈选半径与范围内数量
+            if (circleCenter != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("范围", style = MaterialTheme.typography.labelLarge)
+                        CIRCLE_RADIUS_OPTIONS.forEach { radius ->
+                            val selected = circleRadius == radius
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
+                                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable { circleRadius = radius }
+                            ) {
+                                Text(
+                                    text = circleRadiusLabel(radius),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                        val center = circleCenter
+                        val inRangeCount = if (center == null) 0 else filteredPins.count { pin ->
+                            haversineDistance(center.latitude, center.longitude, pin.latitude, pin.longitude) <= circleRadius
+                        }
+                        Text(
+                            text = "范围内 $inRangeCount 个",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        IconButton(onClick = { circleCenter = null }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭圈选", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
             }
 
             // 搜索栏
@@ -821,7 +892,7 @@ fun MapScreen(
         }
 
         // 监听 pins 变化，更新地图标记
-        LaunchedEffect(filteredPins, categories, highlightedPinId) {
+        LaunchedEffect(filteredPins, categories, highlightedPinId, circleCenter, circleRadius) {
             val aMap = mapHolder._aMap ?: return@LaunchedEffect
             if (isDragging) {
                 return@LaunchedEffect
@@ -834,7 +905,7 @@ fun MapScreen(
             oldIds.subtract(currentIds).forEach { id ->
                 markerMap[id]?.remove()
             }
-            fun buildMarkerIcon(pin: Pin): com.amap.api.maps.model.BitmapDescriptor {
+            fun buildMarkerIcon(pin: Pin, dimmed: Boolean): com.amap.api.maps.model.BitmapDescriptor {
                 val color = categories.find { it.id == pin.categoryId }?.color ?: DEFAULT_PIN_COLOR
                 val label = pin.title.take(1)
 
@@ -854,6 +925,8 @@ fun MapScreen(
                 val totalH = size + arrowH
                 val bubble = createBitmap(size, totalH)
                 val canvas = Canvas(bubble)
+                // 圈选范围外的标记整体变淡
+                canvas.saveLayerAlpha(null, if (dimmed) DIM_ALPHA else FULL_ALPHA)
 
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
                 paint.color = color
@@ -931,19 +1004,28 @@ fun MapScreen(
                     paint.style = Paint.Style.FILL
                 }
 
+                canvas.restore()
+
                 return BitmapDescriptorFactory.fromBitmap(bubble)
             }
 
+            val dimById = filteredPins.associate { pin ->
+                pin.id to (circleCenter?.let { center ->
+                    haversineDistance(center.latitude, center.longitude, pin.latitude, pin.longitude) > circleRadius
+                } ?: false)
+            }
             val newMap = markerMap.toMutableMap()
             filteredPins.forEach { pin ->
                 val oldMarker = markerMap[pin.id]
                 val prevPin = renderedPins[pin.id]
+                val dimmed = dimById[pin.id] == true
                 val pinChanged = prevPin == null || prevPin.title != pin.title ||
                     prevPin.avatarPath != pin.avatarPath ||
                     prevPin.categoryId != pin.categoryId ||
                     prevPin.markKind != pin.markKind ||
                     prevPin.latitude != pin.latitude ||
-                    prevPin.longitude != pin.longitude
+                    prevPin.longitude != pin.longitude ||
+                    renderedDim[pin.id] != dimmed
                 val highlightChanged = pin.id == highlightedPinId || pin.id == previousHighlightedPinId
                 if (oldMarker != null && !pinChanged && !highlightChanged) {
                     newMap[pin.id] = oldMarker
@@ -952,7 +1034,7 @@ fun MapScreen(
                     val marker = aMap.addMarker(
                         MarkerOptions()
                             .position(LatLng(pin.latitude, pin.longitude))
-                            .icon(buildMarkerIcon(pin))
+                            .icon(buildMarkerIcon(pin, dimmed))
                             .snippet(pin.id.toString())
                             .draggable(true)
                             .anchor(0.5f, 1.0f)
@@ -962,8 +1044,36 @@ fun MapScreen(
             }
             markerMap = newMap
             renderedPins = filteredPins.associateBy { it.id }
+            renderedDim = dimById
             previousHighlightedPinId = highlightedPinId
         }
+    }
+
+    // 圈选圆圈与圆心标记
+    LaunchedEffect(circleCenter, circleRadius) {
+        val aMap = mapHolder._aMap ?: return@LaunchedEffect
+        circleOverlay?.remove()
+        circleOverlay = null
+        circleCenterMarker?.remove()
+        circleCenterMarker = null
+        val center = circleCenter ?: return@LaunchedEffect
+        circleOverlay = aMap.addCircle(
+            CircleOptions()
+                .center(center)
+                .radius(circleRadius.toDouble())
+                .strokeColor(CIRCLE_STROKE_COLOR)
+                .strokeWidth(CIRCLE_STROKE_WIDTH)
+                .fillColor(CIRCLE_FILL_COLOR)
+        )
+        circleCenterMarker = aMap.addMarker(
+            MarkerOptions()
+                .position(center)
+                .snippet(CIRCLE_CENTER_SNIPPET)
+                .draggable(true)
+                .anchor(0.5f, 0.5f)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                .zIndex(CIRCLE_CENTER_Z_INDEX)
+        )
     }
 
     // POI 地址搜索结果高亮
@@ -1032,6 +1142,13 @@ private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
 private val SEARCH_ITEM_V_PADDING = 6.dp
+private val CIRCLE_STROKE_COLOR = 0xFF1E88E5.toInt()
+private val CIRCLE_FILL_COLOR = 0x221E88E5
+private const val CIRCLE_STROKE_WIDTH = 4f
+private const val CIRCLE_CENTER_SNIPPET = "__circle_center"
+private const val CIRCLE_CENTER_Z_INDEX = 997f
+private const val DIM_ALPHA = 90
+private const val FULL_ALPHA = 255
 
 @Composable
 private fun SearchResultItem(

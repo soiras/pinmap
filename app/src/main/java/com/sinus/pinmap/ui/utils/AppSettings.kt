@@ -12,8 +12,10 @@ object AppSettings {
     private const val KEY_OLLAMA_BASE_URL = "ollama_base_url"
     private const val KEY_OLLAMA_MODEL = "ollama_model"
     private const val KEY_AI_SEARCH_ENABLED = "ai_search_enabled"
+    private const val KEY_CIRCLE_RADIUS = "circle_radius"
     private const val DEFAULT_OLLAMA_BASE_URL = "http://192.168.1.103:11434"
     private const val DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
+    private const val DEFAULT_CIRCLE_RADIUS = 500
 
     private lateinit var mPrefs: SharedPreferences
 
@@ -47,6 +49,17 @@ object AppSettings {
     fun saveOllamaModel(model: String) {
         if (::mPrefs.isInitialized) {
             mPrefs.edit { putString(KEY_OLLAMA_MODEL, model) }
+        }
+    }
+
+    /** 地图圈选的默认半径（米） */
+    fun getCircleRadius(): Int =
+        if (::mPrefs.isInitialized) mPrefs.getInt(KEY_CIRCLE_RADIUS, DEFAULT_CIRCLE_RADIUS)
+        else DEFAULT_CIRCLE_RADIUS
+
+    fun saveCircleRadius(radius: Int) {
+        if (::mPrefs.isInitialized) {
+            mPrefs.edit { putInt(KEY_CIRCLE_RADIUS, radius) }
         }
     }
 }

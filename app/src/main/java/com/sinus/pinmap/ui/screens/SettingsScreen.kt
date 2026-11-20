@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +24,8 @@ import com.sinus.pinmap.data.repository.PinRepository
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import com.sinus.pinmap.ui.utils.AppSettings
+import com.sinus.pinmap.ui.utils.CIRCLE_RADIUS_OPTIONS
+import com.sinus.pinmap.ui.utils.circleRadiusLabel
 import com.sinus.pinmap.ui.utils.AuthState
 import com.sinus.pinmap.ui.utils.PinExporter
 import com.sinus.pinmap.ui.utils.PinImporter
@@ -164,6 +167,38 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 enabled = aiConfigChanged && aiConfigEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("保存 AI 配置") }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Text("圈选半径", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "在地图上单击设置圆心时使用的默认半径，圈选时仍可在底部临时切换。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            var circleRadius by remember { mutableStateOf(AppSettings.getCircleRadius()) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CIRCLE_RADIUS_OPTIONS.forEach { radius ->
+                    val selected = circleRadius == radius
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable {
+                            circleRadius = radius
+                            AppSettings.saveCircleRadius(radius)
+                        }
+                    ) {
+                        Text(
+                            text = circleRadiusLabel(radius),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
