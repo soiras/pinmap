@@ -946,7 +946,7 @@ fun MapScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 8.dp, top = 12.dp),
+                        .padding(start = 16.dp, end = 8.dp, top = SHEET_HEADER_TOP_PADDING),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -973,13 +973,29 @@ fun MapScreen(
                         }
                     }
                     if (sheetMode == MapSheetMode.Circle) {
-                        IconButton(onClick = { circleCenter = null }) {
-                            Icon(Icons.Default.Close, contentDescription = "关闭圈选")
+                        Box(
+                            modifier = Modifier
+                                .size(SHEET_HEADER_BUTTON_SIZE)
+                                .clip(CircleShape)
+                                .clickable { circleCenter = null },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "关闭圈选",
+                                modifier = Modifier.size(SHEET_HEADER_ICON_SIZE)
+                            )
                         }
                     } else {
-                        TextButton(onClick = { viewerPin = null }) {
-                            Text("返回")
-                        }
+                        Text(
+                            text = "返回",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable { viewerPin = null }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
 
@@ -1361,6 +1377,9 @@ private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_STATE_BORDER_WIDTH_DP = 2f
 private val SHEET_CORNER_RADIUS = 24.dp
 private val DISMISS_DRAG_THRESHOLD = 72.dp
+private val SHEET_HEADER_TOP_PADDING = 6.dp
+private val SHEET_HEADER_BUTTON_SIZE = 36.dp
+private val SHEET_HEADER_ICON_SIZE = 18.dp
 private val SEARCH_RESULT_MAX_HEIGHT = 290.dp
 private const val SHEET_HEIGHT_FRACTION = 0.36f
 private val FAB_OFFSET = 64.dp
