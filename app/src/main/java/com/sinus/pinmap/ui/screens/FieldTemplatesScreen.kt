@@ -104,18 +104,22 @@ fun FieldTemplatesScreen(
 
     /** 重写所有模板的 rowKey 与 sortOrder，顺序即新行序、行内顺序 */
     suspend fun persistRows(newRows: List<List<FieldTemplate>>) {
-        // 先落到界面，再写库；否则松手瞬间会先闪回原位再跳到新位置
-        rows = newRows
+        // 行 key 必须是行内某个字段的 id；拆行后剩余行还带着指向被拆字段的旧 rowKey，
+        // 与被拆出的字段自身 id 撞成同一个列表 key，会直接崩 "Key ... was already used"。
+        // 所以先归一化整份 rows 再落到界面，界面与写库用的是同一套 key。
         var order = 0
-        newRows.forEach { row ->
-            // 行 key 必须指向行内字段的 id；拆出首字段后旧 key 会指到行外，需要重新取
+        val normalized = newRows.map { row ->
             val validKey = row.first().rowKey?.takeIf { k -> row.any { it.id == k } }
             val key: Long? = if (row.size <= 1) null else (validKey ?: row.first().id)
-            row.forEach { template ->
+            row.map { template ->
                 val updated = template.copy(rowKey = key, sortOrder = order)
                 order++
-                if (updated != template) templateRepo.updateFieldTemplate(updated)
+                updated
             }
+        }
+        rows = normalized
+        normalized.forEach { row ->
+            row.forEach { template -> templateRepo.updateFieldTemplate(template) }
         }
         load()
     }
