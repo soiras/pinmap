@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -109,6 +110,7 @@ import com.sinus.pinmap.ui.utils.MediaFileHelper
 
 
 private val THUMBNAIL_SIZE = 120.dp
+private val MERGED_THUMBNAIL_SIZE = 56.dp
 private val POPUP_MAX_WIDTH = 180.dp
 private val AVATAR_SIZE = 64.dp
 private val AVATAR_BADGE_SIZE = 24.dp
@@ -388,6 +390,39 @@ fun PinEditScreen(
                     IconButton(onClick = { onBack(pinLat, pinLng) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
+                    Box {
+                        var showMarkMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showMarkMenu = true }) {
+                            Icon(
+                                markKind.icon,
+                                contentDescription = "标记状态：${markKind.label}",
+                                tint = markKind.color
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMarkMenu,
+                            onDismissRequest = { showMarkMenu = false }
+                        ) {
+                            MarkKind.entries.forEach { kind ->
+                                DropdownMenuItem(
+                                    text = { Text(kind.label) },
+                                    onClick = {
+                                        showMarkMenu = false
+                                        if (kind != markKind) {
+                                            markKind = kind
+                                            markDirty()
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(kind.icon, contentDescription = null, tint = kind.color)
+                                    },
+                                    trailingIcon = if (markKind == kind) {
+                                        { Icon(Icons.Default.Check, contentDescription = null) }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
                     if (!isCreate) {
                         var exportProgress by remember { mutableStateOf(0f) }
                         IconButton(onClick = {
@@ -408,39 +443,6 @@ fun PinEditScreen(
                             }
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "导出标记")
-                        }
-                        Box {
-                            var showMarkMenu by remember { mutableStateOf(false) }
-                            IconButton(onClick = { showMarkMenu = true }) {
-                                Icon(
-                                    markKind.icon,
-                                    contentDescription = "标记状态：${markKind.label}",
-                                    tint = markKind.color
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showMarkMenu,
-                                onDismissRequest = { showMarkMenu = false }
-                            ) {
-                                MarkKind.entries.forEach { kind ->
-                                    DropdownMenuItem(
-                                        text = { Text(kind.label) },
-                                        onClick = {
-                                            showMarkMenu = false
-                                            if (kind != markKind) {
-                                                markKind = kind
-                                                markDirty()
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(kind.icon, contentDescription = null, tint = kind.color)
-                                        },
-                                        trailingIcon = if (markKind == kind) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
-                            }
                         }
                         IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除标记")
@@ -634,6 +636,7 @@ fun PinEditScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val isMerged = row.size > 1
                         row.forEach { template ->
                             Column(modifier = Modifier.weight(1f)) {
                         when (template.fieldType) {
@@ -706,7 +709,7 @@ fun PinEditScreen(
                                 Text(text = template.fieldName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 val images = getImages(template)
-                                if (images.isNotEmpty()) {
+                                if (images.isNotEmpty() || isMerged) {
                                     val rowState = rememberLazyListState()
                                     var previousImageCount by remember { mutableIntStateOf(images.size) }
                                     LaunchedEffect(images.size) {
@@ -720,7 +723,7 @@ fun PinEditScreen(
                                         itemsIndexed(images) { index, img ->
                                             var imgPos by remember { mutableStateOf(Offset.Zero) }
                                             Box(modifier = Modifier
-                                                .size(THUMBNAIL_SIZE)
+                                                .size(if (isMerged) MERGED_THUMBNAIL_SIZE else THUMBNAIL_SIZE)
                                                 .onGloballyPositioned { imgPos = it.positionInWindow() }
                                                 .combinedClickable(
                                                     onClick = { viewerImages = images; viewerStartIndex = index },
@@ -737,26 +740,37 @@ fun PinEditScreen(
                                                 }) { Icon(Icons.Default.Close, contentDescription = "删除", tint = MaterialTheme.colorScheme.onError, modifier = Modifier.padding(4.dp)) }
                                             }
                                         }
+                                        if (isMerged) {
+                                            item {
+                                                AddMediaTile(label = if (images.isEmpty()) "选择图片" else "添加图片") {
+                                                    openMediaPicker(template.id, "image/*")
+                                                }
+                                            }
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    if (images.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
                                 }
-                                OutlinedButton(
-                                    onClick = {
-                                        openMediaPicker(template.id, "image/*")
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text(if (images.isEmpty()) "选择图片" else "添加图片") }
+                                if (!isMerged) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            openMediaPicker(template.id, "image/*")
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text(if (images.isEmpty()) "选择图片" else "添加图片") }
+                                }
                             }
                             FieldType.VIDEO -> {
                                 Text(text = template.fieldName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 val videos = editingImages[template.id] ?: fieldValues[template.id]?.map { it.value ?: "" } ?: emptyList()
-                                if (videos.isNotEmpty()) {
+                                if (videos.isNotEmpty() || isMerged) {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         itemsIndexed(videos) { _, video ->
                                             var videoPos by remember { mutableStateOf(Offset.Zero) }
                                             Box(modifier = Modifier
-                                                .size(THUMBNAIL_SIZE)
+                                                .size(if (isMerged) MERGED_THUMBNAIL_SIZE else THUMBNAIL_SIZE)
                                                 .onGloballyPositioned { videoPos = it.positionInWindow() }
                                                 .combinedClickable(
                                                     onClick = { playingVideo = video },
@@ -768,21 +782,32 @@ fun PinEditScreen(
                                                 )
                                             ) {
                                                 VideoThumbnail(videoUri = video, modifier = Modifier.fillMaxSize())
-                                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.surface,                         modifier = Modifier.align(Alignment.Center).size(ICON_SIZE_48))
+                                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.align(Alignment.Center).size(ICON_SIZE_48))
                                                 Surface(color = MaterialTheme.colorScheme.error, shape = CircleShape, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(DELETE_BUTTON_SIZE).clickable {
                                                     editingImages = editingImages + (template.id to (videos - video)); markDirty()
                                                 }) { Icon(Icons.Default.Close, contentDescription = "删除", tint = MaterialTheme.colorScheme.onError, modifier = Modifier.padding(4.dp)) }
                                             }
                                         }
+                                        if (isMerged) {
+                                            item {
+                                                AddMediaTile(label = if (videos.isEmpty()) "选择视频" else "添加视频") {
+                                                    openMediaPicker(template.id, "video/*")
+                                                }
+                                            }
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    if (videos.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
                                 }
-                                OutlinedButton(
-                                    onClick = {
-                                        openMediaPicker(template.id, "video/*")
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text(if (videos.isEmpty()) "选择视频" else "添加视频") }
+                                if (!isMerged) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            openMediaPicker(template.id, "video/*")
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text(if (videos.isEmpty()) "选择视频" else "添加视频") }
+                                }
                             }
                             }
                             }
@@ -1195,5 +1220,19 @@ private fun saveToGallery(context: Context, url: String) {
     } catch (e: Exception) {
         Log.e("Sinus-PinEdit", "save failed", e)
         Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun AddMediaTile(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(MERGED_THUMBNAIL_SIZE)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Default.Add, contentDescription = label)
     }
 }
