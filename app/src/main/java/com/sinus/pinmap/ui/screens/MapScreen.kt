@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -281,6 +282,30 @@ fun MapScreen(
     var poiHighlightLat by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightLng by remember { mutableDoubleStateOf(0.0) }
     var poiHighlightMarker by remember { mutableStateOf<com.amap.api.maps.model.Marker?>(null) }
+
+    fun openPinFromSearch(pin: Pin) {
+        highlightedPinId = pin.id
+        mapHolder._aMap?.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(
+                LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
+            )
+        )
+        cancelAiSearch()
+        showSearchResults = false
+        keyboardController?.hide()
+    }
+
+    fun openPoiFromSearch(poi: PoiItemV2) {
+        poiHighlightLat = poi.latLonPoint.latitude
+        poiHighlightLng = poi.latLonPoint.longitude
+        mapHolder._aMap?.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(
+                LatLng(poiHighlightLat, poiHighlightLng), ZOOM_SEARCH
+            )
+        )
+        showSearchResults = false
+        keyboardController?.hide()
+    }
     var isDragging by remember { mutableStateOf(false) }
 
     // 位置权限请求
@@ -388,6 +413,20 @@ fun MapScreen(
     }
 
     val scope = rememberCoroutineScope()
+    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * SHEET_HEIGHT_FRACTION
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    var searchBottom by remember { mutableStateOf(16.dp) }
+    LaunchedEffect(imeInsets) {
+        snapshotFlow { imeInsets.getBottom(density) }
+            .collect { imePx ->
+                searchBottom = if (imePx > 0) {
+                    (with(density) { imePx.toDp() } - NAV_BAR_GAP).coerceAtLeast(16.dp)
+                } else {
+                    16.dp
+                }
+            }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
@@ -503,18 +542,110 @@ fun MapScreen(
             })
         }
 
-        val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-        val sheetHeight = (screenHeight * 0.42f).coerceIn(260.dp, 460.dp)
-
-        // 默认态：只保留搜索栏（与搜索结果浮层）
+        // 默认态：底部搜索栏，结果列表在搜索栏上方
         if (sheetMode == MapSheetMode.Hidden) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 16.dp, end = 16.dp, bottom = searchBottom)
             ) {
+                if (searchActive) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = SEARCH_PANEL_MAX_HEIGHT)
+                        ) {
+                            if (isAiSearching) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                        Text("AI 搜索中...", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            } else if (aiSearchError != null) {
+                                item {
+                                    Text(
+                                        aiSearchError ?: "",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            }
+                            if (aiResults.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "AI 搜索结果",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                items(aiResults) { pin ->
+                                    SearchResultItem(
+                                        title = pin.title,
+                                        subtitle = pin.address,
+                                        onClick = { openPinFromSearch(pin) }
+                                    )
+                                }
+                            }
+                            if (searchResults.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "标记",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                items(searchResults) { pin ->
+                                    SearchResultItem(
+                                        title = pin.title,
+                                        subtitle = pin.address,
+                                        onClick = { openPinFromSearch(pin) }
+                                    )
+                                }
+                            }
+                            if (poiResults.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "地址",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                items(poiResults) { poi ->
+                                    SearchResultItem(
+                                        title = poi.title,
+                                        subtitle = poi.snippet,
+                                        onClick = { openPoiFromSearch(poi) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
@@ -526,16 +657,15 @@ fun MapScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 2.dp),
+                            .padding(horizontal = 16.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             Icons.Default.Search,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { newValue: String ->
@@ -563,7 +693,6 @@ fun MapScreen(
                                 unfocusedBorderColor = Color.Transparent
                             )
                         )
-
                         if (searchQuery.isNotBlank()) {
                             IconButton(
                                 onClick = {
@@ -575,7 +704,6 @@ fun MapScreen(
                                 Icon(Icons.Default.Close, contentDescription = "清除搜索")
                             }
                         }
-
                         if (searchQuery.isNotBlank() && AppSettings.isAiSearchEnabled()) {
                             IconButton(
                                 onClick = {
@@ -620,218 +748,134 @@ fun MapScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
 
-                        Box {
-                            val filterIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            IconButton(onClick = { showCategoryFilter = true }) {
-                                androidx.compose.foundation.Canvas(modifier = Modifier.size(20.dp)) {
-                                    val stroke = 1.8.dp.toPx()
-                                    listOf(1f, 0.72f, 0.44f).forEachIndexed { index, ratio ->
-                                        val y = size.height * (0.22f + index * 0.28f)
-                                        val lineWidth = size.width * ratio
-                                        drawLine(
-                                            color = filterIconColor,
-                                            start = Offset((size.width - lineWidth) / 2f, y),
-                                            end = Offset((size.width + lineWidth) / 2f, y),
-                                            strokeWidth = stroke,
-                                            cap = StrokeCap.Round
-                                        )
-                                    }
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = showCategoryFilter,
-                                onDismissRequest = { showCategoryFilter = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("全部") },
-                                    onClick = {
-                                        selectedCategoryId = null
-                                        markFilter = null
-                                        showCategoryFilter = false
-                                    },
-                                    leadingIcon = if (selectedCategoryId == null && markFilter == null) {
-                                        { Icon(Icons.Default.Check, contentDescription = null) }
-                                    } else null
-                                )
-                                MarkKind.entries.filter { it != MarkKind.NONE }.forEach { kind ->
-                                    DropdownMenuItem(
-                                        text = { Text(kind.label) },
-                                        onClick = {
-                                            markFilter = if (markFilter == kind) null else kind
-                                            showCategoryFilter = false
-                                        },
-                                        leadingIcon = {
-                                            Icon(kind.icon, contentDescription = null, tint = kind.color)
-                                        },
-                                        trailingIcon = if (markFilter == kind) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
-                                categories.forEach { category ->
-                                    DropdownMenuItem(
-                                        text = { Text(category.name) },
-                                        onClick = {
-                                            selectedCategoryId = category.id
-                                            showCategoryFilter = false
-                                        },
-                                        leadingIcon = {
-                                            CategoryBadge(
-                                                color = category.color,
-                                                iconPath = category.icon,
-                                                size = 12.dp
-                                            )
-                                        },
-                                        trailingIcon = if (selectedCategoryId == category.id) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
-                            }
+            // 分类筛选 - 左下角
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = searchBottom + FAB_OFFSET)
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { showCategoryFilter = true },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(FAB_CORNER_RADIUS),
+                    modifier = Modifier.size(FAB_SIZE)
+                ) {
+                    val filterIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    androidx.compose.foundation.Canvas(modifier = Modifier.size(FAB_ICON_SIZE)) {
+                        val stroke = 2.dp.toPx()
+                        listOf(1f, 0.72f, 0.44f).forEachIndexed { index, ratio ->
+                            val y = size.height * (0.26f + index * 0.24f)
+                            val lineWidth = size.width * ratio
+                            drawLine(
+                                color = filterIconColor,
+                                start = Offset((size.width - lineWidth) / 2f, y),
+                                end = Offset((size.width + lineWidth) / 2f, y),
+                                strokeWidth = stroke,
+                                cap = StrokeCap.Round
+                            )
                         }
                     }
                 }
-
-                // 搜索结果浮层
-                if (searchActive) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = SEARCH_PANEL_MAX_HEIGHT),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                DropdownMenu(
+                    expanded = showCategoryFilter,
+                    onDismissRequest = { showCategoryFilter = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("全部") },
+                        onClick = {
+                            selectedCategoryId = null
+                            markFilter = null
+                            showCategoryFilter = false
+                        },
+                        leadingIcon = if (selectedCategoryId == null && markFilter == null) {
+                            { Icon(Icons.Default.Check, contentDescription = null) }
+                        } else null
+                    )
+                    MarkKind.entries.filter { it != MarkKind.NONE }.forEach { kind ->
+                        DropdownMenuItem(
+                            text = { Text(kind.label) },
+                            onClick = {
+                                markFilter = if (markFilter == kind) null else kind
+                                showCategoryFilter = false
+                            },
+                            leadingIcon = {
+                                Icon(kind.icon, contentDescription = null, tint = kind.color)
+                            },
+                            trailingIcon = if (markFilter == kind) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
                         )
-                    ) {
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            if (isAiSearching) {
-                                item {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                        Text("AI 搜索中...", style = MaterialTheme.typography.bodyMedium)
-                                    }
-                                }
-                            } else if (aiSearchError != null) {
-                                item {
-                                    Text(
-                                        aiSearchError ?: "",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(16.dp)
-                                    )
-                                }
-                            }
+                    }
+                    categories.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category.name) },
+                            onClick = {
+                                selectedCategoryId = category.id
+                                showCategoryFilter = false
+                            },
+                            leadingIcon = {
+                                CategoryBadge(
+                                    color = category.color,
+                                    iconPath = category.icon,
+                                    size = 12.dp
+                                )
+                            },
+                            trailingIcon = if (selectedCategoryId == category.id) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
+                    }
+                }
+            }
 
-                            if (aiResults.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        "AI 搜索结果",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                items(aiResults) { pin ->
-                                    SearchResultItem(
-                                        title = pin.title,
-                                        subtitle = pin.address,
-                                        onClick = {
-                                            scope.launch {
-                                                val aMap = mapHolder._aMap ?: return@launch
-                                                highlightedPinId = pin.id
-                                                aMap.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
-                                                    )
-                                                )
-                                                cancelAiSearch()
-                                                showSearchResults = false
-                                                keyboardController?.hide()
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-
-                            if (searchResults.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        "标记",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                items(searchResults) { pin ->
-                                    SearchResultItem(
-                                        title = pin.title,
-                                        subtitle = pin.address,
-                                        onClick = {
-                                            scope.launch {
-                                                val aMap = mapHolder._aMap ?: return@launch
-                                                highlightedPinId = pin.id
-                                                aMap.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(pin.latitude, pin.longitude), ZOOM_SEARCH
-                                                    )
-                                                )
-                                                cancelAiSearch()
-                                                showSearchResults = false
-                                                keyboardController?.hide()
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-
-                            if (poiResults.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        "地址",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                items(poiResults) { poi ->
-                                    SearchResultItem(
-                                        title = poi.title,
-                                        subtitle = poi.snippet,
-                                        onClick = {
-                                            val aMap = mapHolder._aMap
-                                            if (aMap != null) {
-                                                poiHighlightLat = poi.latLonPoint.latitude
-                                                poiHighlightLng = poi.latLonPoint.longitude
-                                                aMap.animateCamera(
-                                                    CameraUpdateFactory.newLatLngZoom(
-                                                        LatLng(
-                                                            poi.latLonPoint.latitude,
-                                                            poi.latLonPoint.longitude
-                                                        ), ZOOM_SEARCH
-                                                    )
-                                                )
-                                                cancelAiSearch()
-                                                showSearchResults = false
-                                                keyboardController?.hide()
-                                            }
-                                        }
+            // 定位 - 右下角
+            SmallFloatingActionButton(
+                onClick = {
+                    if (!hasLocationPermission) {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    } else {
+                        scope.launch {
+                            val locationResult = locationManager.getCurrentLocation()
+                            if (locationResult.isSuccess) {
+                                val location = locationResult.getOrNull()
+                                if (location != null) {
+                                    val aMap = mapHolder._aMap ?: return@launch
+                                    myLocationMarker?.remove()
+                                    val markerOptions = MarkerOptions()
+                                        .position(location)
+                                        .title("当前位置")
+                                        .draggable(false)
+                                        .snippet("你在当前位置")
+                                    myLocationMarker = aMap.addMarker(markerOptions)
+                                    aMap.animateCamera(
+                                        CameraUpdateFactory.newLatLngZoom(location, ZOOM_LOCATION)
                                     )
                                 }
                             }
                         }
                     }
-                }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = searchBottom + FAB_OFFSET)
+                    .size(FAB_SIZE),
+                shape = RoundedCornerShape(FAB_CORNER_RADIUS),
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = "定位到当前位置",
+                    modifier = Modifier.size(FAB_ICON_SIZE)
+                )
             }
         }
 
@@ -1035,59 +1079,6 @@ fun MapScreen(
                     }
                 }
             }
-        }
-
-        // 定位按钮 - 放在搜索框右侧
-        SmallFloatingActionButton(
-            onClick = {
-                if (!hasLocationPermission) {
-                    // 没有权限，请求权限
-                    locationPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        )
-                    )
-                } else {
-                    // 有权限，执行定位
-                    scope.launch {
-                        val locationResult = locationManager.getCurrentLocation()
-                        if (locationResult.isSuccess) {
-                            val location = locationResult.getOrNull()
-                            if (location != null) {
-                                val aMap = mapHolder._aMap ?: return@launch
-
-                                // 移除旧的当前位置标记
-                                myLocationMarker?.remove()
-
-                                // 添加新的当前位置标记
-                                val markerOptions = MarkerOptions()
-                                    .position(location)
-                                    .title("当前位置")
-                    .draggable(false)
-                                    .snippet("你在当前位置")
-
-                                val marker = aMap.addMarker(markerOptions)
-                                myLocationMarker = marker
-
-                                // 移动地图到当前位置
-                                aMap.animateCamera(CameraUpdateFactory.newLatLngZoom(location, ZOOM_LOCATION))
-                            }
-                        }
-                    }
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = 16.dp,
-                    bottom = if (sheetMode == MapSheetMode.Hidden) 16.dp else sheetHeight + FAB_GAP
-                )
-                .size(FAB_SIZE),
-            shape = RoundedCornerShape(FAB_CORNER_RADIUS),
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Icon(Icons.Default.LocationOn, contentDescription = "定位到当前位置", modifier = Modifier.size(FAB_ICON_SIZE))
         }
 
         // 监听 pins 变化，更新地图标记
@@ -1301,7 +1292,9 @@ private val MARKER_WATCHED_COLOR = 0xFF1E88E5.toInt()
 private val MARKER_STATE_BORDER_WIDTH_DP = 2f
 private val SHEET_CORNER_RADIUS = 24.dp
 private val SEARCH_PANEL_MAX_HEIGHT = 320.dp
-private val FAB_GAP = 12.dp
+private const val SHEET_HEIGHT_FRACTION = 0.42f
+private val FAB_OFFSET = 64.dp
+private val NAV_BAR_GAP = 80.dp
 private val SEARCH_ITEM_V_MARGIN = 0.dp
 private val SEARCH_ITEM_H_PADDING = 12.dp
 private val SEARCH_ITEM_V_PADDING = 6.dp
