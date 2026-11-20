@@ -1153,7 +1153,7 @@ fun MapScreen(
             oldIds.subtract(currentIds).forEach { id ->
                 markerMap[id]?.remove()
             }
-            fun buildMarkerIcon(pin: Pin, dimmed: Boolean): com.amap.api.maps.model.BitmapDescriptor {
+            fun buildMarkerIcon(pin: Pin): com.amap.api.maps.model.BitmapDescriptor {
                 val color = categories.find { it.id == pin.categoryId }?.color ?: DEFAULT_PIN_COLOR
                 val label = pin.title.take(1)
 
@@ -1173,8 +1173,6 @@ fun MapScreen(
                 val totalH = size + arrowH
                 val bubble = createBitmap(size, totalH)
                 val canvas = Canvas(bubble)
-                // 圈选范围外的标记整体变淡
-                canvas.saveLayerAlpha(null, if (dimmed) DIM_ALPHA else FULL_ALPHA)
 
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
                 paint.color = color
@@ -1252,8 +1250,6 @@ fun MapScreen(
                     paint.style = Paint.Style.FILL
                 }
 
-                canvas.restore()
-
                 return BitmapDescriptorFactory.fromBitmap(bubble)
             }
 
@@ -1272,8 +1268,7 @@ fun MapScreen(
                     prevPin.categoryId != pin.categoryId ||
                     prevPin.markKind != pin.markKind ||
                     prevPin.latitude != pin.latitude ||
-                    prevPin.longitude != pin.longitude ||
-                    renderedDim[pin.id] != dimmed
+                    prevPin.longitude != pin.longitude
                 val highlightChanged = pin.id == highlightedPinId || pin.id == previousHighlightedPinId
                 if (oldMarker != null && !pinChanged && !highlightChanged) {
                     newMap[pin.id] = oldMarker
@@ -1282,7 +1277,8 @@ fun MapScreen(
                     val marker = aMap.addMarker(
                         MarkerOptions()
                             .position(LatLng(pin.latitude, pin.longitude))
-                            .icon(buildMarkerIcon(pin, dimmed))
+                            .icon(buildMarkerIcon(pin))
+                            .alpha(if (dimmed) DIM_FACTOR else 1f)
                             .snippet(pin.id.toString())
                             .draggable(true)
                             .anchor(0.5f, 1.0f)
@@ -1294,6 +1290,21 @@ fun MapScreen(
             renderedPins = filteredPins.associateBy { it.id }
             renderedDim = dimById
             previousHighlightedPinId = highlightedPinId
+        }
+    }
+
+    // 圈选范围变化时用 Marker 自身透明度过渡，避免重建图标导致逐个变化
+    LaunchedEffect(renderedDim) {
+        if (renderedDim.isEmpty() || markerMap.isEmpty()) return@LaunchedEffect
+        val startAlpha = markerMap.mapValues { it.value.alpha }
+        repeat(ALPHA_ANIMATION_STEPS) { index ->
+            val progress = (index + 1).toFloat() / ALPHA_ANIMATION_STEPS
+            markerMap.forEach { (id, marker) ->
+                val from = startAlpha[id] ?: marker.alpha
+                val target = if (renderedDim[id] == true) DIM_FACTOR else 1f
+                marker.alpha = from + (target - from) * progress
+            }
+            delay(ALPHA_ANIMATION_FRAME_MS)
         }
     }
 
@@ -1362,8 +1373,9 @@ private val CIRCLE_FILL_COLOR = 0x221E88E5
 private const val CIRCLE_STROKE_WIDTH = 4f
 private const val CIRCLE_CENTER_SNIPPET = "__circle_center"
 private const val CIRCLE_CENTER_Z_INDEX = 997f
-private const val DIM_ALPHA = 90
-private const val FULL_ALPHA = 255
+private const val DIM_FACTOR = 90f / 255f
+private const val ALPHA_ANIMATION_STEPS = 8
+private const val ALPHA_ANIMATION_FRAME_MS = 22L
 
 private enum class MapSheetMode { Hidden, Circle, Detail }
 
