@@ -1302,6 +1302,7 @@ fun MapScreen(
                     marker?.let { newMap[pin.id] = it }
                 }
             }
+            Log.i("Sinus-Map", "标记同步：筛选 ${filteredPins.size} 个，地图上 ${newMap.size} 个")
             markerMap = newMap
             renderedPins = filteredPins.associateBy { it.id }
             renderedDim = dimById

@@ -1,5 +1,6 @@
 package com.sinus.pinmap.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sinus.pinmap.data.entity.FieldTemplate
@@ -33,6 +34,7 @@ class MapViewModel(
     private fun loadPins() {
         viewModelScope.launch {
             mPinRepository.getAllPins().collect { pinList ->
+                Log.i("Sinus-Pin", "地图 ViewModel 收到 ${pinList.size} 个标记")
                 mPins.value = pinList
             }
         }

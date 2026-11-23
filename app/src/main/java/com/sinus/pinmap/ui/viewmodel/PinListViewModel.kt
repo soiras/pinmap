@@ -124,6 +124,7 @@ class PinListViewModel(
     private fun loadPins() {
         viewModelScope.launch {
             mPinRepository.getAllPins().collect { pinList ->
+                Log.i("Sinus-PinList", "列表 ViewModel 收到 ${pinList.size} 个标记")
                 mPins.value = pinList
             }
         }
