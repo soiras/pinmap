@@ -34,7 +34,7 @@ class MapViewModel(
     private fun loadPins() {
         viewModelScope.launch {
             mPinRepository.getAllPins().collect { pinList ->
-                Log.i("Sinus-Pin", "地图 ViewModel 收到 ${pinList.size} 个标记")
+                Log.e("Soiras-MapViewModel", "地图 ViewModel 收到 ${pinList.size} 个标记")
                 mPins.value = pinList
             }
         }

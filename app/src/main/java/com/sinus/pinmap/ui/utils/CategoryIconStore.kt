@@ -14,7 +14,7 @@ import java.io.FileOutputStream
  */
 object CategoryIconStore {
 
-    private const val TAG = "Sinus-CategoryIcon"
+    private const val TAG = "Soiras-CategoryIconStore"
     private const val DIR_NAME = "category_icons"
     private const val COPY_BUFFER_SIZE = 8 * 1024
 

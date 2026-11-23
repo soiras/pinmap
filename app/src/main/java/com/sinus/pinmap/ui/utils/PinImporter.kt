@@ -23,7 +23,7 @@ import java.util.zip.ZipInputStream
 
 object PinImporter {
 
-    private const val TAG = "Sinus-Import"
+    private const val TAG = "Soiras-PinImporter"
     private const val COPY_BUFFER_SIZE = 64 * 1024
 
     data class ImportPreview(
@@ -94,7 +94,7 @@ object PinImporter {
     suspend fun preview(context: Context, uri: Uri): ImportPreview {
         val file = parseFile(context, uri)
         val pinCount = file.categories.sumOf { it.pins.size } + file.orphanPins.size
-        Log.d(TAG, "preview: categories=${file.categories.size}, templates=${file.categories.sumOf { it.templates.size }}, pins=$pinCount")
+        Log.e(TAG, "preview: categories=${file.categories.size}, templates=${file.categories.sumOf { it.templates.size }}, pins=$pinCount")
         return ImportPreview(
             categoryCount = file.categories.size,
             templateCount = file.categories.sumOf { it.templates.size },
@@ -115,9 +115,9 @@ object PinImporter {
         uri: Uri,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ): ImportResult {
-        Log.d(TAG, "import start, uri=$uri")
+        Log.e(TAG, "import start, uri=$uri")
         val file = parseFile(context, uri)
-        Log.d(TAG, "parsed: categories=${file.categories.size}, pins=${file.categories.sumOf { it.pins.size }}, templates=${file.categories.sumOf { it.templates.size }}")
+        Log.e(TAG, "parsed: categories=${file.categories.size}, pins=${file.categories.sumOf { it.pins.size }}, templates=${file.categories.sumOf { it.templates.size }}")
 
         // 第一步：收集所有需要解压的媒体条目
         val mediaEntries = mutableSetOf<String>()
@@ -143,7 +143,7 @@ object PinImporter {
         // 分类图标也放在 files/ 下，需要一起解压并回写路径
         val iconEntries = file.categories.mapNotNull { it.icon }.filter { it.startsWith("files/") }.toSet()
         mediaEntries.addAll(iconEntries)
-        Log.d(TAG, "media entries to extract: ${mediaEntries.size} (avatar: ${avatarEntries.size}, icon: ${iconEntries.size})")
+        Log.e(TAG, "media entries to extract: ${mediaEntries.size} (avatar: ${avatarEntries.size}, icon: ${iconEntries.size})")
 
         // 第二步：解压媒体文件，得到 oldEntry -> newPath 映射
         val mediaDir = File(context.filesDir, "images").apply { mkdirs() }
@@ -160,12 +160,12 @@ object PinImporter {
                 onProgress(done, totalWork)
             }
         )
-        Log.d(TAG, "media extracted: ${mediaPathMap.size}/${mediaEntries.size}")
+        Log.e(TAG, "media extracted: ${mediaPathMap.size}/${mediaEntries.size}")
 
         // 第三步：事务写入
         val result = try {
             database.withTransaction {
-                Log.d(TAG, "db transaction start")
+                Log.e(TAG, "db transaction start")
                 val categoryRepo = CategoryRepository(database.categoryStore())
                 val templateRepo = FieldTemplateRepository(database.fieldTemplateStore())
                 val pinRepo = PinRepository(database.pinStore())
@@ -188,7 +188,7 @@ object PinImporter {
                 templateIdMap: Map<Long, Long>,
                 templateTypeMap: Map<Long, FieldType>
             ) {
-                Log.d(TAG, "import pin: ${pinData.title}")
+                Log.e(TAG, "import pin: ${pinData.title}")
                 var avatarPath: String? = null
                 if (pinData.avatarEntry != null) {
                     avatarPath = mediaPathMap[pinData.avatarEntry]
@@ -243,7 +243,7 @@ object PinImporter {
             }
 
             for (catData in file.categories) {
-                Log.d(TAG, "import category: ${catData.name}")
+                Log.e(TAG, "import category: ${catData.name}")
                 // 分类：按名称合并
                 var category = existingCategories.firstOrNull { it.name == catData.name }
                 val isNewCategory = category == null
@@ -341,7 +341,7 @@ object PinImporter {
             }
             throw e
         }
-        Log.d(TAG, "import done: result=$result")
+        Log.e(TAG, "import done: result=$result")
 
         return result
     }
@@ -484,7 +484,7 @@ object PinImporter {
         onProgress: () -> Unit = {}
     ): Map<String, String> {
         if (entries.isEmpty()) return emptyMap()
-        Log.d(TAG, "extractMedia: entries=$entries")
+        Log.e(TAG, "extractMedia: entries=$entries")
         val result = mutableMapOf<String, String>()
         val usedNames = mutableSetOf<String>()
         val resolver = context.contentResolver
@@ -511,7 +511,7 @@ object PinImporter {
                         val dest = File(targetDir, fileName)
                         FileOutputStream(dest).use { out -> zis.copyTo(out, COPY_BUFFER_SIZE) }
                         result[entryName] = Uri.fromFile(dest).toString()
-                        Log.d(TAG, "extracted: $entryName -> $dest")
+                        Log.e(TAG, "extracted: $entryName -> $dest")
                         onProgress()
                     }
                     entry = zis.nextEntry

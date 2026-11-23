@@ -142,7 +142,7 @@ fun PinEditScreen(
     val templateRepo = remember { FieldTemplateRepository(database.fieldTemplateStore()) }
     val valueRepo = remember { FieldValueRepository(database.fieldValueStore()) }
 
-    Log.d("Sinus-PinEdit", "params: pinId=$pinId lat=$lat lng=$lng")
+    Log.e("Soiras-PinEditScreen", "params: pinId=$pinId lat=$lat lng=$lng")
     val isCreate = pinId == 0L
 
     var title by remember { mutableStateOf("") }
@@ -214,11 +214,11 @@ fun PinEditScreen(
 
     LaunchedEffect(isCreate, pinLat, pinLng) {
         if (isCreate && (pinLat != 0.0 || pinLng != 0.0)) {
-            Log.d("Sinus-PinEdit", "auto geocode: lat=$pinLat lng=$pinLng")
+            Log.e("Soiras-PinEditScreen", "auto geocode: lat=$pinLat lng=$pinLng")
             val search = GeocodeSearch(context)
             search.setOnGeocodeSearchListener(object : GeocodeSearch.OnGeocodeSearchListener {
                 override fun onRegeocodeSearched(result: com.amap.api.services.geocoder.RegeocodeResult?, code: Int) {
-                    Log.d("Sinus-PinEdit", "auto onRegeocodeSearched: code=$code result=$result")
+                    Log.e("Soiras-PinEditScreen", "auto onRegeocodeSearched: code=$code result=$result")
                     if (code == 1000 && result != null) {
                         address = result.regeocodeAddress.formatAddress
                     }
@@ -537,11 +537,11 @@ fun PinEditScreen(
                             IconButton(
                                 onClick = {
                                     scope.launch {
-                                        Log.d("Sinus-PinEdit", "manual geocode: lat=$pinLat lng=$pinLng")
+                                        Log.e("Soiras-PinEditScreen", "manual geocode: lat=$pinLat lng=$pinLng")
                                         val search = GeocodeSearch(context)
                                         search.setOnGeocodeSearchListener(object : GeocodeSearch.OnGeocodeSearchListener {
                                             override fun onRegeocodeSearched(result: com.amap.api.services.geocoder.RegeocodeResult?, code: Int) {
-                                                Log.d("Sinus-PinEdit", "onRegeocodeSearched: code=$code result=$result")
+                                                Log.e("Soiras-PinEditScreen", "onRegeocodeSearched: code=$code result=$result")
                                                 if (code == 1000 && result != null) {
                                                     address = result.regeocodeAddress.formatAddress
                                                     markDirty()
@@ -1195,7 +1195,7 @@ private fun saveToGallery(context: Context, url: String) {
         }
         Toast.makeText(context, "已保存到${if (isVideo) "视频" else "相册"}", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        Log.e("Sinus-PinEdit", "save failed", e)
+        Log.e("Soiras-PinEditScreen", "save failed", e)
         Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
     }
 }

@@ -47,7 +47,7 @@ class OfflineMapManager(context: Context) {
             mManager.downloadByCityName(name)
             mDownloadStates[name] = 0 to 0
         } catch (e: Exception) {
-            Log.e("Sinus-OfflineMap", "download error: $name", e)
+            Log.e("Soiras-OfflineMapManager", "download error: $name", e)
         }
     }
 

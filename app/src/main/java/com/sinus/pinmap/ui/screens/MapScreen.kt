@@ -160,7 +160,7 @@ fun MapScreen(
                 .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
                 .groupBy { it.pinId }
                 .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
-            Log.d("Sinus-Map", "fieldTextByPin built: templates=$textTemplateIds, values=${values.size}, map=${fieldTextByPin}")
+            Log.e("Soiras-MapScreen", "fieldTextByPin built: templates=$textTemplateIds, values=${values.size}, map=${fieldTextByPin}")
         }
     }
 
@@ -231,7 +231,7 @@ fun MapScreen(
                 })
                 search.searchPOIAsyn()
             } catch (e: Exception) {
-                Log.e("Sinus-Map", "POI search error", e)
+                Log.e("Soiras-MapScreen", "POI search error", e)
             }
         } else {
             poiResults = emptyList()
@@ -362,7 +362,7 @@ fun MapScreen(
                         mapView.onResume()
                     } catch (e: Exception) {
                         // 忽略异常
-                        Log.e("Sinus-Map", "MapScreen: $e")
+                        Log.e("Soiras-MapScreen", "MapScreen: $e")
                     }
                 }
 
@@ -370,7 +370,7 @@ fun MapScreen(
                     try {
                         mapView.onPause()
                     } catch (e: Exception) {
-                        Log.e("Sinus-Map", "MapScreen: $e")
+                        Log.e("Soiras-MapScreen", "MapScreen: $e")
                     }
                 }
 
@@ -1302,7 +1302,7 @@ fun MapScreen(
                     marker?.let { newMap[pin.id] = it }
                 }
             }
-            Log.i("Sinus-Map", "标记同步：筛选 ${filteredPins.size} 个，地图上 ${newMap.size} 个")
+            Log.e("Soiras-MapScreen", "标记同步：筛选 ${filteredPins.size} 个，地图上 ${newMap.size} 个")
             markerMap = newMap
             renderedPins = filteredPins.associateBy { it.id }
             renderedDim = dimById

@@ -43,7 +43,7 @@ abstract class PinmapDatabase : RoomDatabase() {
     abstract fun offlineMapStore(): OfflineMapStore
 
     companion object {
-        private const val TAG = "Sinus-DB"
+        private const val TAG = "Soiras-PinmapDatabase"
 
         @Volatile
         private var mInstance: PinmapDatabase? = null
@@ -123,7 +123,7 @@ abstract class PinmapDatabase : RoomDatabase() {
         }
 
         val mMigration_9_10 = Migration(9, 10) { db ->
-            Log.i(TAG, "迁移 9→10 开始：pins=${db.countRows("pins")}")
+            Log.e(TAG, "迁移 9→10 开始：pins=${db.countRows("pins")}")
             // 三态标记：必吃 / 关注 / 无。老数据的星标语义就是必吃。
             // isFavorite 不再使用，但 SQLite 的老版本不支持 DROP COLUMN，所以整表重建
             db.execSQL("DROP TABLE IF EXISTS pins_new")
@@ -155,21 +155,21 @@ abstract class PinmapDatabase : RoomDatabase() {
                     avatarScale, avatarOffsetX, avatarOffsetY, createdAt, updatedAt
                 FROM pins
             """)
-            Log.i(TAG, "迁移 9→10 拷贝：pins_new=${db.countRows("pins_new")}")
+            Log.e(TAG, "迁移 9→10 拷贝：pins_new=${db.countRows("pins_new")}")
             db.execSQL("DROP TABLE pins")
             db.execSQL("ALTER TABLE pins_new RENAME TO pins")
-            Log.i(TAG, "迁移 9→10 结束：pins=${db.countRows("pins")}")
+            Log.e(TAG, "迁移 9→10 结束：pins=${db.countRows("pins")}")
         }
 
         val mMigration_10_11 = Migration(10, 11) { db ->
-            Log.i(TAG, "迁移 10→11 开始：field_templates=${db.countRows("field_templates")}")
+            Log.e(TAG, "迁移 10→11 开始：field_templates=${db.countRows("field_templates")}")
             // 字段行融合：相同 rowKey 的模板渲染在同一行，null 表示独占一行
             db.addColumnIfMissing("field_templates", "rowKey", "INTEGER")
         }
 
         fun getDatabase(context: Context): PinmapDatabase {
             return mInstance ?: synchronized(this) {
-                Log.i(TAG, "getDatabase：开始打开 pinmap_database")
+                Log.e(TAG, "getDatabase：开始打开 pinmap_database")
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     PinmapDatabase::class.java,
@@ -184,7 +184,7 @@ abstract class PinmapDatabase : RoomDatabase() {
                     .fallbackToDestructiveMigration()
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
-                            Log.i(
+                            Log.e(
                                 TAG,
                                 "Room onOpen：pins=${db.countRows("pins")} " +
                                     "categories=${db.countRows("categories")}"

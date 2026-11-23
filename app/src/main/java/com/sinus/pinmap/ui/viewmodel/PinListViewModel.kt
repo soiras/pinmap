@@ -124,7 +124,7 @@ class PinListViewModel(
     private fun loadPins() {
         viewModelScope.launch {
             mPinRepository.getAllPins().collect { pinList ->
-                Log.i("Sinus-PinList", "列表 ViewModel 收到 ${pinList.size} 个标记")
+                Log.e("Soiras-PinListViewModel", "列表 ViewModel 收到 ${pinList.size} 个标记")
                 mPins.value = pinList
             }
         }
@@ -155,11 +155,11 @@ class PinListViewModel(
                     .filter { it.fieldTemplateId in textTemplateIds && !it.value.isNullOrBlank() }
                     .groupBy { it.pinId }
                     .mapValues { (_, fvs) -> fvs.joinToString(" ") { it.value ?: "" } }
-                Log.d("Sinus-PinList", "fieldTextByPin updated: templates=$textTemplateIds, values=${values.size}, map=${mFieldTextByPin.value}")
+                Log.e("Soiras-PinListViewModel", "fieldTextByPin updated: templates=$textTemplateIds, values=${values.size}, map=${mFieldTextByPin.value}")
                 // 找出被过滤的字段值（调试用）
                 val filtered = values.filter { it.fieldTemplateId !in textTemplateIds }
                 if (filtered.isNotEmpty()) {
-                    Log.d("Sinus-PinList", "filtered out templateIds=${filtered.map { it.fieldTemplateId }.distinct()}, sample=${filtered.take(5).map { "${it.pinId}:${it.value}" }}")
+                    Log.e("Soiras-PinListViewModel", "filtered out templateIds=${filtered.map { it.fieldTemplateId }.distinct()}, sample=${filtered.take(5).map { "${it.pinId}:${it.value}" }}")
                 }
             }
         }

@@ -33,7 +33,7 @@ class PinmapApplication : Application() {
      * 还是查询/渲染层没拿到数据。
      */
     private fun logDatabaseState() {
-        val tag = "Sinus-DB"
+        val tag = "Soiras-PinmapApplication"
         val dbFile = getDatabasePath("pinmap_database")
         var version = -1
         var pins = -1L
@@ -52,15 +52,15 @@ class PinmapApplication : Application() {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(tag, "读取旧库失败: ${e.message}")
+                Log.e(tag, "读取旧库失败: ${e.message}")
             }
         }
-        Log.i(
+        Log.e(
             tag,
             "启动前 DB: path=${dbFile.absolutePath} exists=${dbFile.exists()} " +
                 "size=${dbFile.length()}B version=$version pins=$pins categories=$categories"
         )
-        Log.i(
+        Log.e(
             tag,
             "媒体文件: images=${fileCount("images")} avatars=${fileCount("avatars")} " +
                 "category_icons=${fileCount("category_icons")}"

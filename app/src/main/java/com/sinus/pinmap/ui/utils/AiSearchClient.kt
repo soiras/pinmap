@@ -25,7 +25,7 @@ import kotlin.coroutines.resume
  */
 object AiSearchClient {
 
-    private const val TAG = "Sinus-AiSearch"
+    private const val TAG = "Soiras-AiSearchClient"
     private const val CONNECT_TIMEOUT_SECONDS = 5L
     private const val READ_TIMEOUT_SECONDS = 60L
     private const val MAX_PINS_IN_PROMPT = 200
@@ -59,8 +59,8 @@ object AiSearchClient {
         val categoryMap = categories.associate { it.id to it.name }
         val trimmed = pins.take(MAX_PINS_IN_PROMPT)
 
-        Log.d(TAG, "search start: query='$query', pins=${pins.size} (trimmed=${trimmed.size}), categories=${categories.size}, fieldValues=${fieldValuesByPin.size}")
-        Log.d(TAG, "ollama baseUrl=${AppSettings.getOllamaBaseUrl()}, model=${AppSettings.getOllamaModel()}")
+        Log.e(TAG, "search start: query='$query', pins=${pins.size} (trimmed=${trimmed.size}), categories=${categories.size}, fieldValues=${fieldValuesByPin.size}")
+        Log.e(TAG, "ollama baseUrl=${AppSettings.getOllamaBaseUrl()}, model=${AppSettings.getOllamaModel()}")
 
         // 按分类分组，每个分类一张独立表格
         // 基础列：标题、描述、地址、距离；动态列：该分类自己的字段
@@ -153,8 +153,8 @@ object AiSearchClient {
                 put("temperature", 0.1)
             })
         }
-        Log.d(TAG, "request body: model=${body.optString("model")}, promptLength=${prompt.length} chars")
-        Log.d(TAG, "full prompt:\n$prompt")
+        Log.e(TAG, "request body: model=${body.optString("model")}, promptLength=${prompt.length} chars")
+        Log.e(TAG, "full prompt:\n$prompt")
 
         val request = Request.Builder()
             .url("${AppSettings.getOllamaBaseUrl().trimEnd('/')}/api/generate")
@@ -169,7 +169,7 @@ object AiSearchClient {
                 }
                 resp.body?.string() ?: ""
             }.also {
-                Log.d(TAG, "response received in ${System.currentTimeMillis() - startTime}ms, length=${it.length}")
+                Log.e(TAG, "response received in ${System.currentTimeMillis() - startTime}ms, length=${it.length}")
             }
         } catch (e: Exception) {
             // 协程已被取消（用户点了取消/改了搜索词）：转成取消异常，不当作业务失败
@@ -179,7 +179,7 @@ object AiSearchClient {
             Log.e(TAG, "Ollama request failed", e)
             throw e
         }
-        Log.d(TAG, "raw response: $responseText")
+        Log.e(TAG, "raw response: $responseText")
 
         val ids = try {
             val json = JSONObject(responseText)
@@ -207,7 +207,7 @@ object AiSearchClient {
             Log.e(TAG, "Parse response failed: $responseText", e)
             emptyList()
         }
-        Log.d(TAG, "parsed ids: $ids")
+        Log.e(TAG, "parsed ids: $ids")
 
         SearchResult(ids, responseText)
     }
